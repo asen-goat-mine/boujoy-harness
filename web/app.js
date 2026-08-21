@@ -24,6 +24,9 @@ const state = {
   modelDirectory: null,
   presets: [],
   pendingImages: [],
+  attachmentUrls: new Map(),
+  attachmentLoads: new Map(),
+  attachmentGeneration: 0,
   knowledge: [],
   knowledgeLoading: false,
   knowledgeFilter: "all",
@@ -49,6 +52,8 @@ const state = {
   resolvingInterrupt: false,
   userScrolledUp: false,
   lastManualScrollAt: 0,
+  restoringConversationScroll: false,
+  scrollRestoreGeneration: 0,
   pendingPermission: null,
   running: false,
   busyMode: localStorage.getItem("boujoy-busy-mode") || "steer",
@@ -102,6 +107,106 @@ function safeHttpHref(value = "") {
   } catch (_) {
     return "#";
   }
+}
+
+const MESSAGE_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
+const MESSAGE_VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v"]);
+const MESSAGE_MEDIA_EXTENSION_PATTERN = "(?:png|jpe?g|webp|gif|mp4|webm|mov|m4v)";
+const BOUJOY_MEDIA_PREVIEW_INTENT = /(?:(?:视频|成片|影片|图片|图像|截图|mp4|mov|webm).{0,30}(?:看|播放|显示|预览|找|打开|发|给)|(?:看|播放|显示|预览|找|打开|发|给).{0,30}(?:视频|成片|影片|图片|图像|截图|mp4|mov|webm))/i;
+
+function withBoujoyMediaGuidance(text = "") {
+  const source = String(text);
+  if (!source || !BOUJOY_MEDIA_PREVIEW_INTENT.test(source)) return source;
+  const guidance = [
+    "<!-- BOUJOY_MEDIA_START -->",
+    "内部执行规则，不要在回复中引用。",
+    "本轮直接使用文件或搜索工具查找用户指定的图片或视频；不要先写确认语、道歉或进度说明。",
+    "找到后只给简短结果，并将每个真实文件的绝对路径单独成行。不要解释界面、路径规则或另起 HTTP 服务。",
+    "找不到时只说明实际搜索过的位置，不编造路径。",
+    "<!-- BOUJOY_MEDIA_END -->",
+  ].join("\n");
+  return `${guidance}\n${source}`;
+}
+
+function messageMediaKind(source = "") {
+  const clean = String(source).split(/[?#]/, 1)[0];
+  const match = clean.match(/\.([a-z0-9]+)$/i);
+  const extension = match?.[1]?.toLowerCase() || "";
+  if (MESSAGE_IMAGE_EXTENSIONS.has(extension)) return "image";
+  if (MESSAGE_VIDEO_EXTENSIONS.has(extension)) return "video";
+  return null;
+}
+
+function normalizeMessageMediaSource(rawSource, name = "", { allowRelative = false } = {}) {
+  let source = String(rawSource || "").trim().replace(/^<|>$/g, "");
+  if (!source) return null;
+  try { source = decodeURIComponent(source); } catch (_) {}
+  const kind = messageMediaKind(source);
+  if (!kind) return null;
+  if (/^https?:\/\//i.test(source)) return { kind, src: source, name: name || source.split("/").pop().split(/[?#]/, 1)[0] };
+  if (/^file:\/\//i.test(source)) {
+    try { source = decodeURIComponent(new URL(source).pathname); } catch (_) { return null; }
+  }
+  const isLocal = source.startsWith("/") || /^[a-z]:[\\/]/i.test(source) || allowRelative;
+  return isLocal ? { kind, path: source, name: name || source.replaceAll("\\", "/").split("/").pop() } : null;
+}
+
+function mediaFromText(value = "", { kinds = ["image", "video"] } = {}) {
+  const text = String(value);
+  const media = [];
+  const add = (source, name = "", options = {}) => {
+    const item = normalizeMessageMediaSource(source, name, options);
+    if (item && kinds.includes(item.kind)) media.push(item);
+  };
+  for (const match of text.matchAll(/!\[([^\]]*)\]\(([^)]+)\)/g)) add(match[2], match[1], { allowRelative: true });
+  for (const match of text.matchAll(new RegExp(`https?:\\/\\/[^\\s<>"']+?\\.${MESSAGE_MEDIA_EXTENSION_PATTERN}(?:\\?[^\\s<>"']*)?`, "gi"))) add(match[0]);
+  const unixPath = new RegExp(`(?:^|[\\s(\\[{'"=\\x60：，。；、！？])((?:file:\\/\\/\\/|\\/(?:Users|home|Volumes|tmp|private|var|opt|mnt|media|srv|workspace|workspaces)\\/)[^<>"'\\r\\n]*?\\.${MESSAGE_MEDIA_EXTENSION_PATTERN})`, "gim");
+  for (const match of text.matchAll(unixPath)) add(match[1]);
+  for (const match of text.matchAll(new RegExp(`[a-z]:\\\\[^<>"'\\r\\n]*?\\.${MESSAGE_MEDIA_EXTENSION_PATTERN}`, "gi"))) add(match[0]);
+  const seen = new Set();
+  return media.filter(item => {
+    const key = `${item.kind}:${item.src || item.path}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function mediaFromContent(content, { textKinds = ["image", "video"] } = {}) {
+  const media = [];
+  const visit = part => {
+    if (typeof part === "string") { media.push(...mediaFromText(stripRecallInjection(part), { kinds: textKinds })); return; }
+    if (!part || typeof part !== "object") return;
+    if (["text", "input_text", "output_text"].includes(part.type)) media.push(...mediaFromText(stripRecallInjection(part.text), { kinds: textKinds }));
+    if (String(part.type || "").includes("image")) {
+      const attachment = part.attachment || part.ref;
+      if (attachment?.attachmentId) {
+        media.push({ kind: "image", attachmentId: String(attachment.attachmentId), mediaType: attachment.mediaType, name: attachment.name || part.name || "图片", width: attachment.width, height: attachment.height });
+      } else if (part.data && /^image\/(png|jpeg|webp|gif)$/i.test(part.mediaType || "")) {
+        media.push({ kind: "image", src: `data:${part.mediaType};base64,${part.data}`, name: part.name || "图片" });
+      } else {
+        const item = normalizeMessageMediaSource(part.url || part.path || "", part.name || "", { allowRelative: true });
+        if (item) media.push(item);
+      }
+    }
+    if (String(part.type || "").includes("video")) {
+      const item = normalizeMessageMediaSource(part.url || part.path || "", part.name || "视频", { allowRelative: true });
+      if (item) media.push(item);
+    }
+    if (Array.isArray(part.content)) part.content.forEach(visit);
+  };
+  (Array.isArray(content) ? content : [content]).forEach(visit);
+  const seen = new Set();
+  return media.filter(item => {
+    const key = item.attachmentId ? `attachment:${item.attachmentId}` : `${item.kind}:${item.src || item.path}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function stripRenderedMediaMarkdown(value = "") {
+  return String(value).replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (whole, _label, source) => messageMediaKind(source.trim()) ? "" : whole).trim();
 }
 
 function stripMarkdown(value = "") {
@@ -1153,8 +1258,11 @@ function renderHistoryLoading() {
 function resetSessionView(nextSessionId, { loading = false } = {}) {
   if (state.livePumpTimer) cancelAnimationFrame(state.livePumpTimer);
   if (state.liveScrollFrame) cancelAnimationFrame(state.liveScrollFrame);
+  releaseAttachmentPreviews();
   state.livePumpTimer = null;
   state.liveScrollFrame = null;
+  state.scrollRestoreGeneration += 1;
+  state.restoringConversationScroll = false;
   state.sessionId = nextSessionId;
   state.loadingHistory = loading;
   state.userScrolledUp = false;
@@ -1378,7 +1486,7 @@ function textFromContent(content) {
 // plus the capture directive, so old sessions stay readable and matchable.
 function stripRecallInjection(text = "") {
   let source = String(text);
-  for (const [startTag, endTag] of [["<!-- BOUJOY_RECALL_START -->", "<!-- BOUJOY_RECALL_END -->"], ["<!-- BOUJOY_CAPTURE_START -->", "<!-- BOUJOY_CAPTURE_END -->"]]) {
+  for (const [startTag, endTag] of [["<!-- BOUJOY_RECALL_START -->", "<!-- BOUJOY_RECALL_END -->"], ["<!-- BOUJOY_CAPTURE_START -->", "<!-- BOUJOY_CAPTURE_END -->"], ["<!-- BOUJOY_MEDIA_START -->", "<!-- BOUJOY_MEDIA_END -->"]]) {
     const start = source.indexOf(startTag);
     if (start < 0) continue;
     const end = source.indexOf(endTag, start);
@@ -1557,6 +1665,7 @@ function foldHistory(events) {
       let text = `回合 ${currentTurn ?? ""}`.trim() + " 结束";
       if (reason.kind === "error") text = `回合 ${currentTurn ?? ""} 失败：${reason.error?.message || reason.error || "模型请求出错"}`.trim();
       else if (reason.kind === "max-tokens") text = `回合 ${currentTurn ?? ""} 已达 token 上限，回答被截断`.trim();
+      else if (reason.kind === "aborted" || reason.kind === "interrupted") text = `回合 ${currentTurn ?? ""} 已中断`.trim();
       notices.push({ kind: reason.kind === "error" ? "error" : reason.kind === "max-tokens" ? "max-tokens" : "turn", text, time, turn: currentTurn, at: output.length });
       currentTurn = null;
       continue;
@@ -1617,27 +1726,31 @@ function foldHistory(events) {
       // user-role events for model context. They are engine internals, not
       // messages authored by the person using Boujoy.
       if (data.source?.kind && data.source.kind !== "user") continue;
-      const text = textFromContent(data.content || data.message?.content);
+      const content = data.content || data.message?.content;
+      const text = textFromContent(content);
+      const media = mediaFromContent(content);
       if (/^\/permission\s+(read-only|workspace-write|danger-full-access)\s*$/i.test(text)) continue;
-      if (text) {
+      if (text || media.length) {
         turnToolCount = 0;
         const id = data.id || event.id;
         const prior = output.findIndex(item => item.role === "user" && item.id === id);
         if (prior >= 0) output.splice(prior, 1);
-        output.push({ role: "user", text, delivery: data.deliveryMode || null, time, id, sourceRpcId: data.source?.rpcId });
+        output.push({ role: "user", text: text || "〔图片〕", media, delivery: data.deliveryMode || null, time, id, sourceRpcId: data.source?.rpcId });
       }
     } else if (type === "agent/inbox/spliced") {
       for (const message of data.inserted || []) {
         if (message.source?.kind !== "user") continue;
         const text = textFromContent(message.content);
-        if (!text) continue;
+        const media = mediaFromContent(message.content);
+        if (!text && !media.length) continue;
         const prior = output.findIndex(item => item.role === "user" && item.id === message.id);
         if (prior >= 0) output.splice(prior, 1);
-        output.push({ role: "user", text, delivery: "steer", accepted: true, time, id: message.id, sourceRpcId: message.source?.rpcId });
+        output.push({ role: "user", text: text || "〔图片〕", media, delivery: "steer", accepted: true, time, id: message.id, sourceRpcId: message.source?.rpcId });
       }
     } else if (type === "assistant/message") {
       const message = data.message || data;
       const text = textFromContent(message.content);
+      const media = mediaFromContent(message.content);
       const hasReasoning = Array.isArray(message.content) && message.content.some(part => part && part.type === "reasoning");
       const usage = message.usage || data.usage || null;
       const timing = message.timing || data.timing || null;
@@ -1645,10 +1758,12 @@ function foldHistory(events) {
       // summary minimal instead of inventing a fake thought chain. The raw
       // reasoning is model-internal (often English rambling) — never surface
       // it verbatim; a terse Chinese summary reads clean.
-      const thought = timing?.stepStartTime && timing?.completedTime
-        ? `模型生成 ${formatDuration(Math.max(0, timing.completedTime - timing.stepStartTime))}`
-        : (turnToolCount ? `已完成 ${turnToolCount} 个工具步骤` : "已完成回答");
-      if (text) output.push({ role: "assistant", text, thought, hasReasoning, usage, timing, id: message.id || event.id });
+      const thought = data.interrupted === true
+        ? "回答已中断"
+        : timing?.stepStartTime && timing?.completedTime
+          ? `模型生成 ${formatDuration(Math.max(0, timing.completedTime - timing.stepStartTime))}`
+          : (turnToolCount ? `已完成 ${turnToolCount} 个工具步骤` : "已完成回答");
+      if (text || media.length) output.push({ role: "assistant", text, media, thought, hasReasoning, usage, timing, id: message.id || event.id });
     } else if (type === "tool/call") {
       const view = event.view || data.view || {};
       const title = view.title || data.name || data.toolName || "工具调用";
@@ -1679,9 +1794,105 @@ function foldHistory(events) {
       if (!detail) detail = data.output || data.result || data.text || "";
       const activity = { kind: "result", title, detail, id: data.callId || event.id };
       activities.push(activity);
+      const media = mediaFromContent(data.message?.content || data.content || view.content || [], { textKinds: ["video"] });
+      if (media.length) output.push({ role: "assistant", text: "", media, mediaOnly: true, time, id: `media-${data.callId || event.id || output.length}` });
     }
   }
   return { output, activities, notices };
+}
+
+function messageMediaSource(item = {}) {
+  if (item.src && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(item.src)) return escapeHtml(item.src);
+  if (item.src && /^https?:\/\//i.test(item.src)) return safeHttpHref(item.src);
+  if (item.path) return escapeHtml(`/api/conversation/media?path=${encodeURIComponent(item.path)}`);
+  return "";
+}
+
+function renderMessageMedia(media = [], sessionId = state.sessionId, mode = state.mode) {
+  if (!media.length) return "";
+  const cards = media.map(item => {
+    const name = escapeHtml(item.name || (item.kind === "video" ? "视频" : "图片"));
+    const src = messageMediaSource(item);
+    if (item.kind === "video") {
+      if (!src) return "";
+      return `<figure class="message-media-card loading"><div class="message-media-frame"><video controls playsinline preload="metadata" src="${src}" aria-label="${name}"></video><span class="media-loading">视频加载中…</span></div>${name ? `<figcaption>${name}</figcaption>` : ""}</figure>`;
+    }
+    const attachment = item.attachmentId
+      ? ` data-attachment-id="${escapeHtml(item.attachmentId)}" data-attachment-session="${escapeHtml(sessionId || "")}" data-attachment-mode="${escapeHtml(mode)}"`
+      : "";
+    const source = src ? ` src="${src}"` : "";
+    const ratio = Number(item.width) > 0 && Number(item.height) > 0 ? ` style="aspect-ratio:${Number(item.width)}/${Number(item.height)}"` : "";
+    return `<figure class="message-media-card loading"><div class="message-media-frame"${ratio}><img${source}${attachment} loading="lazy" decoding="async" alt="${name}" title="点击查看原图"><span class="media-loading">图片加载中…</span></div>${name ? `<figcaption>${name}</figcaption>` : ""}</figure>`;
+  }).filter(Boolean);
+  return cards.length ? `<div class="message-media">${cards.join("")}</div>` : "";
+}
+
+function base64Bytes(value = "") {
+  const binary = atob(String(value));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function loadAttachmentUrl(sessionId, attachmentId, mode) {
+  const key = `${mode}:${sessionId}:${attachmentId}`;
+  const cached = state.attachmentUrls.get(key);
+  if (cached) return Promise.resolve(cached);
+  const existing = state.attachmentLoads.get(key);
+  if (existing) return existing;
+  const generation = state.attachmentGeneration;
+  const pending = rpc("session.attachment", { sessionId, attachmentId }, mode)
+    .then(value => {
+      const mediaType = value.attachment?.mediaType || "image/png";
+      if (!/^image\/(png|jpeg|webp|gif)$/i.test(mediaType)) throw new Error("附件不是可预览图片");
+      const url = URL.createObjectURL(new Blob([base64Bytes(value.data)], { type: mediaType }));
+      if (generation !== state.attachmentGeneration) {
+        URL.revokeObjectURL(url);
+        throw new Error("图片所属会话已切换");
+      }
+      state.attachmentUrls.set(key, url);
+      return url;
+    })
+    .finally(() => state.attachmentLoads.delete(key));
+  state.attachmentLoads.set(key, pending);
+  return pending;
+}
+
+function setMediaCardState(element, stateName) {
+  const card = element.closest(".message-media-card");
+  if (!card) return;
+  card.classList.remove("loading", "ready", "error");
+  card.classList.add(stateName);
+  if (stateName === "error") {
+    const status = card.querySelector(".media-loading");
+    if (status) status.textContent = "媒体预览加载失败";
+  }
+}
+
+function hydrateMessageMedia(root) {
+  root.querySelectorAll(".message-media img").forEach(image => {
+    image.addEventListener("load", () => setMediaCardState(image, "ready"), { once: true });
+    image.addEventListener("error", () => setMediaCardState(image, "error"), { once: true });
+    image.addEventListener("click", () => { if (image.src) window.open(image.src, "_blank", "noopener,noreferrer"); });
+    if (image.complete && image.naturalWidth > 0) setMediaCardState(image, "ready");
+  });
+  root.querySelectorAll(".message-media video").forEach(video => {
+    video.addEventListener("loadedmetadata", () => setMediaCardState(video, "ready"), { once: true });
+    video.addEventListener("error", () => setMediaCardState(video, "error"), { once: true });
+    if (video.readyState >= 1) setMediaCardState(video, "ready");
+  });
+  root.querySelectorAll(".message-media img[data-attachment-id]").forEach(image => {
+    loadAttachmentUrl(image.dataset.attachmentSession, image.dataset.attachmentId, image.dataset.attachmentMode)
+      .then(url => { if (image.isConnected) image.src = url; })
+      .catch(() => { if (image.isConnected) setMediaCardState(image, "error"); });
+  });
+}
+
+function releaseAttachmentPreviews() {
+  state.attachmentGeneration += 1;
+  for (const url of state.attachmentUrls.values()) URL.revokeObjectURL(url);
+  state.attachmentUrls.clear();
+  state.attachmentLoads.clear();
 }
 
 function renderHistory(events, { force = false } = {}) {
@@ -1706,14 +1917,14 @@ function renderHistory(events, { force = false } = {}) {
   });
   const pendingOutput = state.pendingSubmissions
     .filter(item => item.sessionId === state.sessionId)
-    .map(item => ({ role: "user", text: item.text, delivery: item.deliveryMode, phase: item.phase, pending: item.phase === "sending", waiting: item.phase !== "sending", id: item.localId }));
+    .map(item => ({ role: "user", text: item.text, media: mediaFromContent(item.content), delivery: item.deliveryMode, phase: item.phase, pending: item.phase === "sending", waiting: item.phase !== "sending", id: item.localId }));
   const steeringQueueOutput = state.queue
     .filter(item => item.placement === "steering")
     .map(item => {
       const message = messageFromQueueItem(item);
-      return { role: "user", text: textFromContent(message.content), delivery: "steer", phase: "steering", waiting: true, id: message.id || item.id };
+      return { role: "user", text: textFromContent(message.content), media: mediaFromContent(message.content), delivery: "steer", phase: "steering", waiting: true, id: message.id || item.id };
     })
-    .filter(item => item.text && !output.some(existing => existing.role === "user" && (existing.id === item.id || existing.text.trim() === item.text.trim())) && !pendingOutput.some(existing => existing.text.trim() === item.text.trim()));
+    .filter(item => (item.text || item.media.length) && !output.some(existing => existing.role === "user" && (existing.id === item.id || (item.text && existing.text.trim() === item.text.trim()))) && !pendingOutput.some(existing => item.text && existing.text.trim() === item.text.trim()));
   const liveOutput = state.liveResponse?.sessionId === state.sessionId && state.liveResponse.text
     ? [{
       role: "assistant",
@@ -1742,6 +1953,9 @@ function renderHistory(events, { force = false } = {}) {
   const previousScrollTop = stream.scrollTop;
   const previousBottomOffset = Math.max(0, stream.scrollHeight - stream.scrollTop - stream.clientHeight);
   const wasNearBottom = previousBottomOffset < 72;
+  const readerWasScrolledUp = state.userScrolledUp;
+  const scrollRestoreGeneration = ++state.scrollRestoreGeneration;
+  state.restoringConversationScroll = true;
   const empty = $("#emptyAgent");
   stream.classList.remove("history-loading");
   const hasMessages = visibleOutput.some(item => item.role === "user" || item.role === "assistant");
@@ -1754,11 +1968,16 @@ function renderHistory(events, { force = false } = {}) {
     }
     const stamp = messageTimeStamp(item.time);
     const stats = item.role === "assistant" ? messageStatsHtml(item) : "";
+    const rawText = String(item.text || "");
+    const visibleText = item.media?.length && rawText === "〔图片〕" ? "" : stripRenderedMediaMarkdown(rawText);
+    const mediaHtml = renderMessageMedia(item.media || []);
     const bodyHtml = item.streaming
-      ? `${escapeHtml(item.text)}<span class="stream-cursor" aria-hidden="true"></span>`
-      : `${markdown(item.text)}${item.streaming ? '<span class="stream-cursor" aria-hidden="true"></span>' : ""}`;
-    return `<article class="message ${item.role}${item.pending ? " pending" : ""}${item.waiting ? " waiting" : ""}${item.streaming ? " streaming" : ""}"><div class="message-label">${item.role === "user" ? `YOU / 你${item.delivery ? ` · ${item.delivery === "steer" ? "引导当前任务" : "排到下一条"}` : ""}${item.pending ? " · 发送中" : item.phase === "steering" ? " · 已送入下一步，等待当前步骤结束" : item.phase === "queued" ? " · 已排队" : item.accepted ? " · 已进入当前执行" : ""}` : `BOUJOY AGENT${item.streaming ? " · 正在生成" : ""}`}${stamp ? `<span class="message-stamp">${stamp}</span>` : ""}</div>${item.role === "assistant" && item.thought ? `<div class="thought-summary"><b>${item.hasReasoning ? "推理摘要" : "执行摘要"}</b><span>${escapeHtml(item.thought)}</span></div>` : ""}<div class="message-body">${bodyHtml}</div>${stats}<div class="message-actions"><button type="button" class="message-copy" data-copy-text="${escapeHtml(item.text)}" title="复制这条消息">⧉ 复制</button></div></article>`;
+      ? `${escapeHtml(rawText)}<span class="stream-cursor" aria-hidden="true"></span>`
+      : `${visibleText ? markdown(visibleText) : ""}${mediaHtml}`;
+    const actions = visibleText ? `<div class="message-actions"><button type="button" class="message-copy" data-copy-text="${escapeHtml(rawText)}" title="复制这条消息">⧉ 复制</button></div>` : "";
+    return `<article class="message ${item.role}${item.pending ? " pending" : ""}${item.waiting ? " waiting" : ""}${item.streaming ? " streaming" : ""}${item.media?.length ? " has-media" : ""}"><div class="message-label">${item.role === "user" ? `YOU / 你${item.delivery ? ` · ${item.delivery === "steer" ? "引导当前任务" : "排到下一条"}` : ""}${item.pending ? " · 发送中" : item.phase === "steering" ? " · 已送入下一步，等待当前步骤结束" : item.phase === "queued" ? " · 已排队" : item.accepted ? " · 已进入当前执行" : ""}` : `BOUJOY AGENT${item.streaming ? " · 正在生成" : item.mediaOnly ? " · 媒体" : ""}`}${stamp ? `<span class="message-stamp">${stamp}</span>` : ""}</div>${item.role === "assistant" && item.thought ? `<div class="thought-summary"><b>${item.hasReasoning ? "推理摘要" : "执行摘要"}</b><span>${escapeHtml(item.thought)}</span></div>` : ""}<div class="message-body">${bodyHtml}</div>${stats}${actions}</article>`;
   }).join("");
+  hydrateMessageMedia(stream);
   // The user card intentionally has a cut-paper bottom edge. Its original
   // percentage-height diagonal looks identical for normal prompts, but can
   // overlap the last lines of a very long paste. Measure after layout so the
@@ -1776,7 +1995,8 @@ function renderHistory(events, { force = false } = {}) {
   // distance from the bottom is stable. Readers scrolled up keep their place;
   // readers at the live edge follow the newest content.
   requestAnimationFrame(() => {
-    if (state.userScrolledUp) {
+    if (scrollRestoreGeneration !== state.scrollRestoreGeneration) return;
+    if (readerWasScrolledUp) {
       // Streaming content grows strictly below the reader. Keeping the exact
       // top offset makes a manual reading position immovable, including the
       // final plain-text -> Markdown landing render.
@@ -1786,6 +2006,11 @@ function renderHistory(events, { force = false } = {}) {
     } else {
       stream.scrollTop = Math.max(0, stream.scrollHeight - stream.clientHeight - previousBottomOffset);
     }
+    requestAnimationFrame(() => {
+      if (scrollRestoreGeneration === state.scrollRestoreGeneration) {
+        state.restoringConversationScroll = false;
+      }
+    });
   });
 }
 
@@ -1955,9 +2180,10 @@ async function sendPrompt(text = $("#promptInput").value.trim()) {
   autoResizePrompt();
   // Match the native composer: ordered image attachments precede the text
   // block in one prompt admission. Multimodal providers preserve this order.
+  const admittedText = withBoujoyMediaGuidance(text);
   const content = [
     ...state.pendingImages.map(image => ({ type: "image", mediaType: image.mediaType, data: image.data, name: image.name })),
-    ...(text ? [{ type: "text", text }] : []),
+    ...(admittedText ? [{ type: "text", text: admittedText }] : []),
   ];
   const deliveryMode = state.running ? state.busyMode : "queue";
   const submissionRpcId = rpcId();
@@ -2149,7 +2375,12 @@ async function addImages(files) {
 }
 
 function renderPendingImages() {
-  $("#contextChips").innerHTML = state.pendingImages.map((image, index) => `<button class="context-chip" data-remove-image="${index}">图片 · ${escapeHtml(image.name)} ×</button>`).join("");
+  $("#contextChips").innerHTML = state.pendingImages.map((image, index) => `
+    <div class="context-image-preview">
+      <img src="data:${escapeHtml(image.mediaType)};base64,${image.data}" alt="${escapeHtml(image.name)}">
+      <span>${escapeHtml(image.name)}</span>
+      <button type="button" data-remove-image="${index}" aria-label="移除 ${escapeHtml(image.name)}">×</button>
+    </div>`).join("");
 }
 
 async function renameSession() {
@@ -3024,6 +3255,13 @@ function bindEvents() {
   // my place alone" — stop auto-following until the user returns to bottom.
   const messageStream = $("#messageStream");
   const suspendLiveFollow = () => {
+    // A real wheel/touch gesture always wins over an in-flight programmatic
+    // restore. Invalidate its animation frame before it can pull the reader
+    // back to the previous edge.
+    if (state.restoringConversationScroll) {
+      state.scrollRestoreGeneration += 1;
+      state.restoringConversationScroll = false;
+    }
     state.lastManualScrollAt = performance.now();
     state.userScrolledUp = true;
     if (state.liveScrollFrame) {
@@ -3048,6 +3286,10 @@ function bindEvents() {
   }, { passive: true });
   messageStream.addEventListener("touchend", () => { lastTouchY = null; }, { passive: true });
   messageStream.addEventListener("scroll", () => {
+    // Replacing the timeline and restoring its anchor emits browser scroll
+    // events too. They are layout bookkeeping, not evidence that the user
+    // scrolled up; treating them as manual intent caused the end-of-answer hop.
+    if (state.restoringConversationScroll) return;
     const stream = messageStream;
     const atBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 72;
     if (!atBottom) {

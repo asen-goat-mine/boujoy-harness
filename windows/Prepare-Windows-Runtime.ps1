@@ -8,7 +8,7 @@ param(
     [string]$Root = "",
     [string]$Node = "",
     [string]$Python = "",
-    [string]$DshVersion = "0.1.0-rc.6"
+    [string]$DshVersion = "0.1.1-rc.2"
 )
 
 Set-StrictMode -Version Latest

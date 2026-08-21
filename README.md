@@ -2,11 +2,9 @@
 
 # Boujoy Harness
 
-## 把 Agent 从聊天框里拽出来，接进你的本地工作区。
+## DeepSeek Harness 的本地桌面客户端
 
-一个基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的本地 Agent 工作台：保留上游 Harness 的事件与 RPC 协议，把它装进有任务、对话、知识库和运行信号的 Boujoy 界面。
-
-**不是又一个聊天壳。是让 Agent 读得懂工作区、跑得住长任务、还能回到你手上的本地工作台。**
+Boujoy Harness 使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 作为 Agent runtime，并提供桌面宿主、本地网关、对话界面和 Markdown 知识工作区。事件与 RPC 继续使用上游协议。
 
 [English](README_EN.md) · [观看完整演示](https://github.com/asen-goat-mine/boujoy-harness/releases/download/demo-2026-08-19/Boujoy-Harness-Demo.mp4) · [DeepSeek Harness 上游项目](https://github.com/deepseek-ai/deepseek-harness)
 
@@ -20,29 +18,27 @@
 
 <p align="center"><sub>README 内自动播放 UI 演示；点击即可打开完整 49 秒视频。</sub></p>
 
-## 它解决什么
+## 项目说明
 
-DeepSeek Harness 是强大的 Agent runtime，但它原生更像一台裸引擎：模型、工具和事件流已经就绪，长期资料、工作区和桌面体验还需要自己拼。
-
-Boujoy Harness 做的是中间这层产品化工作：
+Boujoy Harness 不替代 DeepSeek Harness。上游继续负责模型、工具、事件帧和 RPC；Boujoy 负责本地桌面体验和 Markdown 工作区。
 
 1. **不替换 Agent runtime。** DeepSeek Harness 仍负责模型、工具、事件帧和 RPC。
 2. **让工作上下文留在本地。** 可连接一个 Markdown Vault，让项目卡、知识卡、提示词和资料仍是普通文件。
-3. **把长对话做得能用。** 历史分页、流式投影、滚动稳定和断线恢复边界，减少长任务时界面乱跳、抢滚动条或吞掉上文。
+3. **处理长对话和媒体。** 历史分页、流式投影、滚动稳定、断线恢复，以及会话内图片和视频预览。
 4. **让本地启动可控。** macOS 有原生宿主与受控重启；Windows 提供浏览器宿主适配器（Beta）。
 
-> 源代码仓库不提供模型，也不附带 DeepSeek Harness 运行时；它不会包含你的 Vault、会话或凭据。便携包是否包含运行时取决于发布者在对应平台上完成的打包与验收。
+> 当前版本按 DeepSeek Harness `0.1.1-rc.2` 适配。源码仓库不提供模型或上游运行时，也不包含个人 Vault、会话或凭据。
 
 ## 核心能力
 
-| 能力 | 你会感受到什么 |
+| 能力 | 说明 |
 | --- | --- |
-| 原生 Agent 连接 | 保持 DeepSeek Harness 的 WebSocket、事件帧与 RPC 语义，不重新发明不兼容的 Agent 协议。 |
-| 本地 Markdown 工作区 | 项目、知识、提示词与内容资料都能留在你拥有的文件夹，而不是锁进云端数据库。 |
-| 对话稳定性 | 长历史按页加载，流式文本与用户滚动分离，减少生成时抢滚动、闪烁和旧消息消失。 |
+| 原生 Agent 连接 | 保持 DeepSeek Harness 的 WebSocket、事件帧与 RPC 语义。 |
+| 本地 Markdown 工作区 | 项目、知识、提示词和内容资料仍是本机普通文件。 |
+| 对话与媒体 | 长历史按页加载；流式文本不抢用户滚动；图片和本机视频可直接在消息中预览。 |
 | 任务与中断交互 | 对需要确认、输入或批准的 Agent RPC 做队列化处理；过期响应会收口，弹窗不会永久卡住。 |
 | 本地优先 | 未配置访问码时仅绑定本机回环地址；macOS 手机配对可启用受访问码保护的局域网访问；没有遥测。 |
-| 可恢复启动 | 对启动健康检查、App Translocation、路径选择和可选知识服务缺失做降级处理。 |
+| 启动恢复 | 处理健康检查、App Translocation、路径选择和可选知识服务缺失。 |
 | 跨平台路线 | macOS 13+ Apple Silicon 原生桌面宿主；Windows 10/11 x64 为浏览器宿主 Beta。 |
 
 ## 工作方式
@@ -182,7 +178,7 @@ env PYTHONDONTWRITEBYTECODE=1 python3 tests/smoke_test.py --skip-live
 python3 tests/smoke_test.py --live-origin http://127.0.0.1:8766
 ~~~
 
-测试会验证网关契约、路径边界、访问控制和便携运行时归一化；不会调用模型，也不会消耗余额。
+测试会验证网关契约、路径边界、媒体预览、访问控制和便携运行时归一化；不会调用模型。当前隔离回归共 21 项。
 
 ## 仓库内容
 

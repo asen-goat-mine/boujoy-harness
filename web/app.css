@@ -242,11 +242,29 @@ html[data-theme="light"] .message.assistant .message-body { background: rgba(255
 .message-body a, .reader-body a { color: var(--cyan); text-decoration-color: var(--acid); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .message.user .message-body a { color: var(--blue); text-decoration-color: var(--pink); }
 .message-body a:hover, .reader-body a:hover { color: var(--acid); background: color-mix(in srgb, var(--blue) 52%, transparent); }
+.message.user.has-media .message-body { padding-bottom: 38px; clip-path: polygon(1% 2%,100% 0,98% calc(100% - 30px),4% 100%); }
+.message-media { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(260px,100%),1fr)); gap: 10px; margin-top: 12px; white-space: normal; }
+.message-media:first-child { margin-top: 0; }
+.message-media-card { min-width: 0; margin: 0; }
+.message-media-frame { position: relative; display: grid; place-items: center; width: 100%; min-height: 160px; aspect-ratio: 16/9; overflow: hidden; border: 1px solid color-mix(in srgb,var(--cyan) 58%,var(--line)); background: rgba(2,4,10,.78); }
+.message-media img, .message-media video { display: block; width: 100%; height: 100%; max-height: min(68vh,720px); object-fit: contain; background: #05070b; }
+.message-media img { cursor: zoom-in; }
+.message-media-card.loading img:not([src]) { visibility: hidden; }
+.message-media-card.ready .media-loading { display: none; }
+.message-media-card.error img, .message-media-card.error video { display: none; }
+.media-loading { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; color: var(--cyan); font: 850 9px var(--mono); letter-spacing: .08em; text-align: center; background: repeating-linear-gradient(135deg,rgba(37,241,208,.06) 0 8px,transparent 8px 16px); }
+.message-media-card figcaption { padding: 6px 8px 0; overflow: hidden; color: var(--muted); font: 750 8px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.message.user .message-media-frame { border-color: color-mix(in srgb,var(--blue) 72%,var(--ink)); background: rgba(255,255,255,.32); }
+.message.user .message-media-card figcaption { color: color-mix(in srgb,var(--ink) 72%,transparent); }
 .composer-wrap { position: relative; z-index: 4; min-width: 0; flex: none; padding: 8px clamp(18px,5vw,68px) 22px; background: linear-gradient(transparent, rgba(8,10,13,.93) 28%); }
 .composer-wrap { grid-row: 4; }
 html[data-theme="light"] .composer-wrap { background: linear-gradient(transparent, rgba(241,234,220,.96) 28%); }
-.context-chips { display: flex; gap: 6px; min-height: 20px; padding: 0 8px 5px; }
+.context-chips { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 7px; min-height: 20px; padding: 0 8px 5px; }
 .context-chip { padding: 4px 7px; color: var(--ink); background: var(--cyan); font: 850 8px var(--mono); transform: rotate(-1deg); }
+.context-image-preview { position: relative; width: 92px; padding: 3px; border: 1px solid var(--cyan); background: rgba(7,10,15,.94); box-shadow: 3px 3px 0 var(--blue); }
+.context-image-preview img { display: block; width: 100%; height: 58px; object-fit: cover; background: var(--ink); }
+.context-image-preview span { display: block; padding: 4px 2px 1px; overflow: hidden; color: var(--text); font: 700 7px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.context-image-preview button { position: absolute; top: -7px; right: -7px; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--ink); border-radius: 50%; color: white; background: var(--pink); font: 900 13px/1 var(--mono); box-shadow: 2px 2px 0 var(--blue); }
 .composer { padding: 12px 13px 10px; color: var(--text); background: rgba(17,19,24,.96); border: 2px solid rgba(255,255,255,.16); box-shadow: 8px 8px 0 var(--blue); clip-path: polygon(.6% 3%,99% 0,100% 92%,2% 100%,0 15%); }
 .composer:focus-within { border-color: var(--acid); box-shadow: 8px 8px 0 var(--pink); }
 html[data-theme="light"] .composer { color: var(--ink); background: rgba(255,250,240,.96); border-color: var(--ink); }
@@ -928,6 +946,7 @@ dialog::backdrop { background: rgba(3,4,7,.74); backdrop-filter: blur(8px); }
     border: 1px solid rgba(255,255,255,.08);
   }
   .message.user .message-body { border-radius: 14px; clip-path: none; box-shadow: none; }
+  .message.user.has-media .message-body { padding-bottom: 14px; clip-path: none; }
   .message.user { margin-left: clamp(14px, 8vw, 60px); }
   .message.assistant { margin-right: clamp(14px, 6vw, 40px); }
 

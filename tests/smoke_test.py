@@ -167,6 +167,14 @@ def isolated_gateway_checks() -> list[str]:
         (vault / "AGENTS.md").write_text("# Protected\n", "utf-8")
         (vault / "03-Knowledge" / "smoke.md").write_text("# Smoke Card\n\nLocal Markdown.\n", "utf-8")
         (vault / "03-Knowledge" / "large.md").write_text("# Large\n\n" + ("x" * 150_000) + "\nFULL-TEXT-MARKER\n", "utf-8")
+        desktop = fake_home / "Desktop"
+        desktop.mkdir()
+        preview_image = desktop / "preview image.png"
+        preview_video = desktop / "preview video.mp4"
+        preview_image.write_bytes(b"image-preview")
+        preview_video.write_bytes(b"0123456789")
+        private_image = fake_home / "private.png"
+        private_image.write_bytes(b"private")
         origin = "http://127.0.0.1:8776"
         restart_file = temp / "restart.request"
         env = dict(os.environ)
@@ -252,6 +260,15 @@ def isolated_gateway_checks() -> list[str]:
             assert status in {400, 403}
             passed.append("vault path containment")
 
+            media_url = origin + "/api/conversation/media?path="
+            status, value = request(media_url + urllib.parse.quote(str(preview_image)))
+            assert status == 200 and value == "image-preview"
+            status, value = request(media_url + urllib.parse.quote(str(preview_video)), headers={"Range": "bytes=2-5"})
+            assert status == 206 and value == "2345"
+            status, _ = request(media_url + urllib.parse.quote(str(private_image)))
+            assert status == 403
+            passed.append("conversation image/video previews + path containment")
+
             status, _ = request(origin + "/api/knowledge/delete-card", {"path": "AGENTS.md"})
             assert status == 403 and (vault / "AGENTS.md").is_file()
             passed.append("protected Markdown deletion guard")
@@ -317,6 +334,9 @@ def isolated_gateway_checks() -> list[str]:
             assert "calc(100% - 36px)" in app_css
             assert "hasActiveLiveResponse" in app_js and "liveScrollFrame" in app_js
             assert "suspendLiveFollow" in app_js and "previousScrollTop" in app_js
+            assert "restoringConversationScroll" in app_js and "scrollRestoreGeneration" in app_js
+            assert "const readerWasScrolledUp = state.userScrolledUp" in app_js
+            assert "if (state.restoringConversationScroll) return;" in app_js
             assert "acceptSessionEvent" in app_js and "intentionalClose" in app_js
             assert "session/subscribed" in app_js and "requestSessionGapRepair" in app_js
             assert "seq is the sole dedup key" in app_js and "requestAnimationFrame(pumpLiveResponse)" in app_js
@@ -347,6 +367,19 @@ def isolated_gateway_checks() -> list[str]:
             assert "...state.pendingImages.map(image" in app_js
             assert "if (type === \"llm/retry\" || type === \"llm/retry-started\")" in app_js
             assert "textBlocks" in app_js
+            assert 'rpc("session.attachment"' in app_js
+            assert "mediaFromContent" in app_js and "hydrateMessageMedia" in app_js
+            assert 'textKinds: ["video"]' in app_js and "：，。；、！？" in app_js
+            assert "BOUJOY_MEDIA_START" in app_js and "withBoujoyMediaGuidance" in app_js
+            assert "内部执行规则，不要在回复中引用" in app_js
+            assert "不要先写确认语、道歉或进度说明" in app_js
+            assert "找到后只给简短结果" in app_js and "不要解释界面、路径规则或另起 HTTP 服务" in app_js
+            assert "const admittedText = withBoujoyMediaGuidance(text)" in app_js
+            assert "\\\\x60：，。；、！？" in app_js
+            assert "/api/conversation/media?path=" in app_js
+            assert ".message-media" in app_css and ".context-image-preview" in app_css
+            assert 'data.interrupted === true' in app_js
+            assert 'reason.kind === "aborted" || reason.kind === "interrupted"' in app_js
             assert "function safeHttpHref" in app_js
             assert 'parsed.protocol === "http:" || parsed.protocol === "https:"' in app_js
             server_source = SERVER.read_text("utf-8")
@@ -364,6 +397,8 @@ def isolated_gateway_checks() -> list[str]:
             assert 'path == "/api/health"' in server_source and '"ready": True' in server_source
             assert '"pid": os.getpid()' in server_source and "--restart-file" in server_source
             assert "request_managed_restart" in server_source and '"Windows restart host is not configured"' in server_source
+            assert 'path == "/api/conversation/media"' in server_source
+            assert "_safe_conversation_media_path" in server_source
             assert "explorer.exe" in server_source and "trash_directory" in server_source
             assert 'case "restart"' in swift and "private func relaunch()" in swift
             assert "BOUJOY_HARNESS_ROOT" in swift and "BoujoyHarnessPortableRoot" in swift
@@ -373,6 +408,7 @@ def isolated_gateway_checks() -> list[str]:
             assert "installRestartSignal" in swift and 'path == "/api/app/restart"' in server_source
             assert '"PYTHONDONTWRITEBYTECODE": "1"' in swift
             assert '"BOUJOY_DSH_ROOT": paths.dshRoot' in swift
+            assert '"--no-open"' in swift
             assert '"/bin/launchctl"' in swift and '"bootstrap", domain' in swift
             assert '"KeepAlive": false' in swift and '"bootout", service' in swift
             assert "/usr/bin/nc -z 127.0.0.1 8766" in swift
@@ -396,6 +432,8 @@ def isolated_gateway_checks() -> list[str]:
             windows_launcher_source = windows_launcher.read_text("utf-8")
             assert "--restart-file" in windows_launcher_source and "taskkill.exe" in windows_launcher_source
             assert "dsh.cmd" in windows_launcher_source and "Start-BoujoyChild" in windows_launcher_source
+            assert windows_launcher_source.count('"--no-open"') == 2
+            assert 'DshVersion = "0.1.1-rc.2"' in windows_runtime.read_text("utf-8")
             assert "Do not copy the macOS runtime" in windows_launcher_source
             assert 'Label "Clean Harness"' in windows_launcher_source
             assert "hostStartTicks" in windows_launcher_source and "startTicks" in windows_launcher_source

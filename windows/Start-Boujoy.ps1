@@ -308,7 +308,7 @@ function Start-BoujoyServices {
         $knowledgeEnvironment = @{} + $commonEnvironment
         $knowledgeEnvironment["DSH_HOME"] = $Layout.KnowledgeHome
         $children.Add((Start-BoujoyChild -Name "knowledge" -FilePath $Layout.DshCommand `
-            -Arguments @("web", "--host", "127.0.0.1", "--port", "3080") -WorkingDirectory $Layout.Vault `
+            -Arguments @("web", "--host", "127.0.0.1", "--port", "3080", "--no-open") -WorkingDirectory $Layout.Vault `
             -Environment $knowledgeEnvironment -StateDirectory $script:StateDirectory))
 
         # macOS starts the clean engine lazily through its native bridge. The
@@ -317,7 +317,7 @@ function Start-BoujoyServices {
         $cleanEnvironment = @{} + $commonEnvironment
         $cleanEnvironment["DSH_HOME"] = $Layout.CleanHome
         $children.Add((Start-BoujoyChild -Name "clean" -FilePath $Layout.DshCommand `
-            -Arguments @("web", "--host", "127.0.0.1", "--port", "3081") -WorkingDirectory $env:USERPROFILE `
+            -Arguments @("web", "--host", "127.0.0.1", "--port", "3081", "--no-open") -WorkingDirectory $env:USERPROFILE `
             -Environment $cleanEnvironment -StateDirectory $script:StateDirectory))
 
         $gatewayEnvironment = @{ "PYTHONDONTWRITEBYTECODE" = "1"; "BOUJOY_DEBUG" = "0" }
