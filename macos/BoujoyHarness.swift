@@ -108,7 +108,7 @@ final class ServiceManager {
         let runtimeBin = URL(fileURLWithPath: paths.dshRoot).appendingPathComponent("runtime/bin").path
         let executable = URL(fileURLWithPath: paths.dshRoot).appendingPathComponent("node_modules/.bin/dsh").path
         let workingDirectory = clean ? FileManager.default.homeDirectoryForCurrentUser.path : paths.vault
-        launch(executable, ["web", "--host", "127.0.0.1", "--port", "\(port)"], cwd: workingDirectory, environment: [
+        launch(executable, ["web", "--host", "127.0.0.1", "--port", "\(port)", "--no-open"], cwd: workingDirectory, environment: [
             "BOUJOY_DSH_ROOT": paths.dshRoot,
             "DSH_HOME": home,
             "DSH_TELEMETRY_DISABLED": "1",

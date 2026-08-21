@@ -678,6 +678,97 @@ class BoujoyHandler(BaseHTTPRequestHandler):
             raise PermissionError("只允许处理 Markdown 文件")
         return target
 
+    CONVERSATION_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    CONVERSATION_VIDEO_EXTS = (".mp4", ".webm", ".mov", ".m4v")
+
+    def _safe_conversation_media_path(self, value: str) -> Path:
+        """Resolve a chat preview without turning the gateway into an
+        arbitrary local-file server. Only image/video files under the Vault,
+        Harness homes, or the user's normal media folders are eligible."""
+        source = urllib.parse.unquote(str(value or "").strip())
+        if not source or "\x00" in source:
+            raise ValueError("无效媒体路径")
+        if source.lower().startswith("file://"):
+            source = urllib.parse.unquote(urllib.parse.urlsplit(source).path)
+            if os.name == "nt" and re.match(r"^/[A-Za-z]:/", source):
+                source = source[1:]
+        candidate = Path(source).expanduser()
+        if not candidate.is_absolute():
+            candidate = self.config.vault / candidate
+        target = candidate.resolve(strict=True)
+        if not target.is_file():
+            raise ValueError("不是文件")
+        if target.suffix.lower() not in self.CONVERSATION_IMAGE_EXTS + self.CONVERSATION_VIDEO_EXTS:
+            raise PermissionError("只允许预览图片和视频")
+        home = Path.home()
+        roots = [
+            self.config.vault,
+            self.config.knowledge_home,
+            self.config.clean_home,
+            *(home / name for name in ("Desktop", "Downloads", "Pictures", "Movies", "Videos")),
+        ]
+        for root in roots:
+            if root is None:
+                continue
+            try:
+                target.relative_to(root.resolve())
+                return target
+            except (OSError, ValueError):
+                continue
+        raise PermissionError("媒体路径不在允许的本机目录中")
+
+    def _stream_conversation_media(self, target: Path) -> None:
+        size = target.stat().st_size
+        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        if not (content_type.startswith("image/") or content_type.startswith("video/")):
+            raise PermissionError("文件类型不可预览")
+        range_header = self.headers.get("Range") if content_type.startswith("video/") else None
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip(), flags=re.IGNORECASE)
+            if match:
+                start = int(match.group(1)) if match.group(1) else 0
+                end = int(match.group(2)) if match.group(2) else size - 1
+                end = min(end, size - 1)
+                if start < 0 or start >= size or end < start:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                length = end - start + 1
+                self.send_response(206)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Length", str(length))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                with target.open("rb") as fh:
+                    fh.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        chunk = fh.read(min(64 * 1024, remaining))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        remaining -= len(chunk)
+                return
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        if content_type.startswith("video/"):
+            self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(size))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        with target.open("rb") as fh:
+            while True:
+                chunk = fh.read(64 * 1024)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+
     MEDIA_EXTS = (".mp4", ".webm", ".mov")
     # Intermediate render fragments and caches are not deliverables. Manim's
     # media/ tree is the render cache (every frame partial); finished videos
@@ -1299,6 +1390,18 @@ class BoujoyHandler(BaseHTTPRequestHandler):
             except (ValueError, OSError, json.JSONDecodeError, urllib.error.URLError) as exc:
                 self._error(502, str(exc))
                 return
+        if path == "/api/conversation/media":
+            try:
+                value = urllib.parse.parse_qs(parsed.query).get("path", [""])[0]
+                target = self._safe_conversation_media_path(value)
+                self._stream_conversation_media(target)
+            except FileNotFoundError:
+                self._error(404, "媒体文件不存在")
+            except PermissionError as exc:
+                self._error(403, str(exc))
+            except (ValueError, OSError) as exc:
+                self._error(400, str(exc))
+            return
         if path == "/api/knowledge/media":
             # Stream a vault video with HTTP Range support so <video> can seek.
             try:

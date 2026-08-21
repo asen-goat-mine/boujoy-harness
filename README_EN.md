@@ -2,11 +2,9 @@
 
 # Boujoy Harness
 
-## Pull the agent out of the chat box and into your local workspace.
+## A local desktop client for DeepSeek Harness
 
-An unofficial product layer for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): it keeps the upstream Agent runtime and protocol, then adds a local Markdown workspace, a desktop-shaped operating surface, and safeguards for long-running work.
-
-**Not another chat skin. A local workbench where an agent can act, recover, and work with context you own.**
+Boujoy Harness uses [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) as the Agent runtime and adds a desktop host, local gateway, conversation UI, and Markdown knowledge workspace. It keeps the upstream event and RPC protocols.
 
 [简体中文](README.md) · [Watch the full demo](https://github.com/asen-goat-mine/boujoy-harness/releases/download/demo-2026-08-19/Boujoy-Harness-Demo.mp4) · [Upstream DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 
@@ -22,17 +20,17 @@ An unofficial product layer for [DeepSeek Harness](https://github.com/deepseek-a
 
 ## What it is
 
-DeepSeek Harness is the runtime. Boujoy Harness is the local product layer around it.
+DeepSeek Harness remains responsible for models, tools, event frames, and RPC. Boujoy provides the local desktop experience and Markdown workspace.
 
 It keeps the upstream WebSocket event and RPC semantics intact, then connects the runtime to a local Markdown vault, a task-oriented UI, and desktop-host reliability work:
 
 - Native WKWebView host and controlled restart path on macOS.
 - A local-only gateway between the UI and separately installed DeepSeek Harness instances.
 - A Markdown vault browser for projects, notes, prompts, and reusable context.
-- Paged history, streaming projection, scroll stability, and reconnect boundaries for long conversations.
+- Paged history, streaming projection, stable scrolling, reconnect handling, and inline image/video previews.
 - Queue-safe interrupt dialogs so expired RPCs do not leave the UI trapped behind a modal.
 
-The source repository does **not** ship a model, provider account, DeepSeek Harness runtime, vault, session, or credentials. Whether a portable package includes a runtime depends on the publisher completing platform-specific packaging and validation.
+This version is tested with DeepSeek Harness `0.1.1-rc.2`. The source repository does not ship a model, provider account, upstream runtime, vault, session, or credentials.
 
 ## Main capabilities
 
@@ -40,10 +38,10 @@ The source repository does **not** ship a model, provider account, DeepSeek Harn
 | --- | --- |
 | Upstream-compatible runtime bridge | DeepSeek Harness stays responsible for models, tools, event frames, and RPC. Boujoy does not invent an incompatible agent protocol. |
 | Local Markdown workspace | Keep projects, knowledge, prompts, and drafts as ordinary files that any editor can open. |
-| Long-task UI safeguards | History paging, streaming isolation, and user-scroll protection reduce jumpy views and missing old messages. |
+| Conversation and media | History paging, streaming isolation, and user-scroll protection keep long conversations stable; images and local videos can render inline. |
 | Recoverable human-in-the-loop actions | Approval and input requests are queued; stale or cancelled requests close cleanly instead of permanently blocking the page. |
 | Local-first defaults | Without an access code the gateway is loopback-only; macOS phone pairing can enable access-code-protected LAN access; no analytics endpoint is configured. |
-| Startup resilience | Health checks, App Translocation handling, path selection, and optional-service degradation avoid turning a missing extra component into a dead app. |
+| Startup recovery | Handles health checks, App Translocation, path selection, and optional service failures. |
 | Cross-platform direction | Native macOS 13+ Apple Silicon host today; Windows 10/11 x64 browser-host adapter is available as a Beta. |
 
 ## Architecture
@@ -170,7 +168,7 @@ For a locally running instance:
 python3 tests/smoke_test.py --live-origin http://127.0.0.1:8766
 ~~~
 
-The suite checks gateway contracts, path containment, access control, and portable-runtime normalization. It does not call a model provider or spend balance.
+The suite checks gateway contracts, path containment, media previews, access control, and portable-runtime normalization. It does not call a model provider. The isolated suite currently contains 21 checks.
 
 ## Repository map
 
