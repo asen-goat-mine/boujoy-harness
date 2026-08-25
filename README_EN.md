@@ -56,7 +56,31 @@ Boujoy UI ── Local gateway ── DeepSeek Harness ── Your model provide
                                   projects · knowledge · prompts · content
 ~~~
 
-## Get started from source on macOS
+## Fastest setup
+
+### macOS
+
+After building DeepSeek Harness, run this from the repository root:
+
+~~~bash
+./macos/setup.command
+~~~
+
+The guided setup detects Python, an existing Boujoy configuration, and common DeepSeek Harness locations. It only opens a folder picker when automatic detection fails. You can select an existing Markdown vault or create an empty one, then the script checks, builds, installs, and opens the Desktop app.
+
+For a read-only environment check:
+
+~~~bash
+./macos/doctor.command
+~~~
+
+### Windows 10/11 x64 (Beta)
+
+Double-click `Setup-Boujoy.cmd` once. It creates an empty vault, checks Node.js and Python, and prepares a Windows-native DeepSeek Harness runtime when missing. Then use `启动 Boujoy Harness.cmd` for normal launches.
+
+Windows still needs preparation and acceptance testing on a real Windows x64 machine. A macOS runtime cannot be reused there.
+
+## Manual source setup on macOS
 
 ### Requirements
 
@@ -126,7 +150,7 @@ It is a **Windows 10/11 x64 Beta**:
 
 ### Missing runtime component
 
-Verify that the DeepSeek Harness root, vault, and Python executable exist. For a downloaded portable package, use the package-root launcher instead of opening the App directly.
+Run `./macos/doctor.command` first. For an initial source install, `./macos/setup.command` avoids hand-writing environment variables. For a downloaded portable package, use the package-root launcher instead of opening the App directly.
 
 ### The splash screen waits for a while
 
@@ -168,7 +192,7 @@ For a locally running instance:
 python3 tests/smoke_test.py --live-origin http://127.0.0.1:8766
 ~~~
 
-The suite checks gateway contracts, path containment, media previews, access control, and portable-runtime normalization. It does not call a model provider. The isolated suite currently contains 21 checks.
+The suite checks gateway contracts, path containment, media previews, access control, and portable-runtime normalization. It does not call a model provider. The isolated suite currently contains 18 checks.
 
 ## Repository map
 
@@ -179,6 +203,8 @@ windows/    Windows browser-host Beta scripts and documentation
 tests/      Model-free smoke tests
 assets/     Boujoy-owned visual assets and attribution material
 ~~~
+
+Convenience entry points: `macos/setup.command`, `macos/doctor.command`, and `Setup-Boujoy.cmd`.
 
 ## License and notices
 

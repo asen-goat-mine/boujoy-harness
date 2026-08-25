@@ -57,7 +57,31 @@ Boujoy UI ── 本地网关 ── DeepSeek Harness ── 你配置的模型 
 - **Boujoy Harness** 负责让行动有工作区、有可视化、有可恢复的桌面体验。
 - **Markdown Vault** 负责把值得长期复用的上下文留在你自己的文件里。
 
-## 5 分钟从源码启动（macOS）
+## 最快上手
+
+### macOS
+
+准备好已构建的 DeepSeek Harness 后，在仓库根目录双击或运行：
+
+~~~bash
+./macos/setup.command
+~~~
+
+引导程序会自动寻找 Python、已安装配置和常见的 DeepSeek Harness 路径；找不到时才会弹出文件夹选择器。知识库可以选择已有 Markdown 文件夹，也可以一键创建空 Vault。完成检查后，它会构建、安装并打开桌面 App。
+
+只想检查环境而不安装时运行：
+
+~~~bash
+./macos/doctor.command
+~~~
+
+### Windows 10/11 x64（Beta）
+
+首次使用双击 `Setup-Boujoy.cmd`。它会创建空 Vault、检查 Node.js 与 Python，并在缺少时安装 Windows 原生 DeepSeek Harness runtime。准备完成后双击 `启动 Boujoy Harness.cmd`。
+
+Windows 仍需要在真实 Windows x64 机器上准备和验收；macOS runtime 不能复制过去使用。
+
+## 手动从源码启动（macOS）
 
 ### 前置条件
 
@@ -136,7 +160,7 @@ Windows 版本保留同一套 Web UI，但用本地 PowerShell 服务宿主，�
 
 ### 为什么应用提示缺少运行组件？
 
-先确认本机的 DeepSeek Harness、Vault 和 Python 路径都真实存在。若你使用下载的便携包，请从 启动 Boujoy Harness.command 启动，而不要直接打开 App。
+先运行 `./macos/doctor.command`。首次源码安装可以直接运行 `./macos/setup.command`，不必手写环境变量。若你使用下载的便携包，请从 启动 Boujoy Harness.command 启动，而不要直接打开 App。
 
 ### 为什么启动页停留较久？
 
@@ -178,7 +202,7 @@ env PYTHONDONTWRITEBYTECODE=1 python3 tests/smoke_test.py --skip-live
 python3 tests/smoke_test.py --live-origin http://127.0.0.1:8766
 ~~~
 
-测试会验证网关契约、路径边界、媒体预览、访问控制和便携运行时归一化；不会调用模型。当前隔离回归共 21 项。
+测试会验证网关契约、路径边界、媒体预览、访问控制和便携运行时归一化；不会调用模型。当前隔离回归共 18 项。
 
 ## 仓库内容
 
@@ -189,6 +213,8 @@ windows/    Windows 浏览器宿主 Beta 脚本与说明
 tests/      不依赖模型的 smoke test
 assets/     Boujoy 一方拥有的图标、字体归属与视觉资源
 ~~~
+
+便利入口：`macos/setup.command`、`macos/doctor.command` 与 `Setup-Boujoy.cmd`。
 
 ## 许可与致谢
 

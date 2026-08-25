@@ -41,6 +41,7 @@ try {
     # unzip tools never misdecode the launcher names.
     Copy-Item -LiteralPath (Join-Path $projectRoot "启动 Boujoy Harness.cmd") -Destination (Join-Path $packageRoot "Start-Boujoy.cmd") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "关闭 Boujoy Harness.cmd") -Destination (Join-Path $packageRoot "Stop-Boujoy.cmd") -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "Setup-Boujoy.cmd") -Destination (Join-Path $packageRoot "Setup-Boujoy.cmd") -Force
     Copy-Item -LiteralPath (Join-Path $windowsSource "README-Windows.zh-CN.md") -Destination (Join-Path $packageRoot "README-Windows.md") -Force
     Copy-Item -LiteralPath (Join-Path $windowsSource "WINDOWS-RELEASE-STATUS.md") -Destination (Join-Path $packageRoot "RELEASE-STATUS.md") -Force
 

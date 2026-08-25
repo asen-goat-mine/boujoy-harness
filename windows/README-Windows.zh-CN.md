@@ -29,6 +29,16 @@ Boujoy-Harness-Windows/
 
 ## 第一次准备（在 Windows 上）
 
+### 推荐：引导式准备
+
+1. 安装 Node.js LTS 和 Python 3。
+2. 双击包根目录的 `Setup-Boujoy.cmd`。
+3. 检查通过后双击 `Start-Boujoy.cmd` 或 `启动 Boujoy Harness.cmd`。
+
+引导脚本只在缺少 Windows runtime 时调用 npm 安装；已有完整 runtime 时只做本地检查。它不会复制或上传你的 Vault。
+
+### 手动准备
+
 1. 安装 Node.js LTS 和 Python 3（推荐 Python 3.12）。
 2. 把一个空的或你自己的 Markdown Vault 放进 `vault/`。不要把私有 Vault 直接用于公开分享。
 3. 在包根目录打开 PowerShell，执行：

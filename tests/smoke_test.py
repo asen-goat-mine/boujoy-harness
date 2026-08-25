@@ -324,6 +324,17 @@ def isolated_gateway_checks() -> list[str]:
             windows_builder = windows_dir / "Build-Windows-Portable.ps1"
             windows_readme = windows_dir / "README-Windows.zh-CN.md"
             windows_release_status = windows_dir / "WINDOWS-RELEASE-STATUS.md"
+            macos_setup = PROJECT / "macos" / "setup.command"
+            macos_doctor = PROJECT / "macos" / "doctor.command"
+            windows_setup = windows_dir / "Setup-Boujoy.ps1"
+            windows_setup_entry = PROJECT / "Setup-Boujoy.cmd"
+            for convenience_entry in (macos_setup, macos_doctor, windows_setup, windows_setup_entry):
+                assert convenience_entry.is_file(), convenience_entry
+            assert "choose folder" in macos_setup.read_text("utf-8")
+            assert "All required local components are ready" in macos_doctor.read_text("utf-8")
+            assert "Prepare-Windows-Runtime.ps1" in windows_setup.read_text("utf-8")
+            assert "Setup-Boujoy.ps1" in windows_setup_entry.read_text("utf-8")
+            assert "Setup-Boujoy.cmd" in windows_builder.read_text("utf-8")
             assert "previousBottomOffset" in app_js
             assert "stream.scrollHeight - previousScrollTop - stream.clientHeight" not in app_js
             assert "maxMessages: HISTORY_FETCH_LIMIT" in app_js

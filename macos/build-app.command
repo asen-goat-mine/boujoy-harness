@@ -81,9 +81,9 @@ if [[ -n "${PORTABLE_ROOT}" ]]; then
   /bin/cp "${SCRIPT_DIR}/PORTABLE-README.zh-CN.md" "${PORTABLE_ROOT}/使用说明书.md"
   /bin/cp "${SCRIPT_DIR}/PORTABLE-RELEASE-STATUS.md" "${PORTABLE_ROOT}/RELEASE-STATUS.md"
 fi
-[[ -x "${DSH_ROOT}/node_modules/.bin/dsh" ]] || { echo "未找到 DeepSeek Harness 运行时。" >&2; exit 1; }
+[[ -x "${DSH_ROOT}/node_modules/.bin/dsh" ]] || { echo "未找到 DeepSeek Harness 运行时。首次安装请运行 ./macos/setup.command。" >&2; exit 1; }
 if [[ -z "${PORTABLE_ROOT}" || ! -x "${PORTABLE_ROOT}/runtime/python/bin/python3" ]]; then
-  [[ -x "${PYTHON_BIN}" ]] || { echo "未找到 Python。可设置 BOUJOY_PYTHON_BIN。" >&2; exit 1; }
+  [[ -x "${PYTHON_BIN}" ]] || { echo "未找到 Python。首次安装请运行 ./macos/setup.command，或设置 BOUJOY_PYTHON_BIN。" >&2; exit 1; }
 fi
 
 /bin/rm -rf -- "${APP_DIR}"
