@@ -127,11 +127,18 @@ def request(
         return exc.code, value
 
 
-def wait_ready(origin: str) -> None:
+def unused_loopback_port() -> int:
+    with socket.socket() as endpoint:
+        endpoint.bind(("127.0.0.1", 0))
+        return endpoint.getsockname()[1]
+
+
+def wait_ready(origin: str, expected_pid: int | None = None) -> None:
     for _ in range(50):
         try:
-            status, value = request(origin + "/api/heartbeat")
-            if status == 200 and value.get("ok"):
+            status, value = request(origin + ("/api/health" if expected_pid is not None else "/api/heartbeat"))
+            ready = value.get("ready") and value.get("pid") == expected_pid if expected_pid is not None else value.get("ok")
+            if status == 200 and ready:
                 return
         except OSError:
             pass
@@ -175,18 +182,19 @@ def isolated_gateway_checks() -> list[str]:
         preview_video.write_bytes(b"0123456789")
         private_image = fake_home / "private.png"
         private_image.write_bytes(b"private")
-        origin = "http://127.0.0.1:8776"
+        port = unused_loopback_port()
+        origin = f"http://127.0.0.1:{port}"
         restart_file = temp / "restart.request"
         env = dict(os.environ)
         env["HOME"] = str(fake_home)
         process = subprocess.Popen(
-            [sys.executable, str(SERVER), "--port", "8776", "--vault", str(vault), "--static", str(STATIC), "--knowledge-home", str(fake_dsh_home), "--restart-file", str(restart_file)],
+            [sys.executable, str(SERVER), "--port", str(port), "--vault", str(vault), "--static", str(STATIC), "--knowledge-home", str(fake_dsh_home), "--restart-file", str(restart_file)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=env,
         )
         try:
-            wait_ready(origin)
+            wait_ready(origin, expected_pid=process.pid)
             passed.append("isolated server startup")
 
             status, value = request(origin + "/api/health")
@@ -523,24 +531,35 @@ def isolated_gateway_checks() -> list[str]:
             assert launched.stdout.strip() == f"{expected_root}|{expected_root}/boujoy-config.json"
             passed.append("portable launcher root handoff")
 
-            orphan_origin = "http://127.0.0.1:8778"
+            orphan_port = unused_loopback_port()
+            orphan_origin = f"http://127.0.0.1:{orphan_port}"
             wrapper = """
-import socket, subprocess, sys, time
-subprocess.Popen(sys.argv[1:], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+import json, subprocess, sys, time
+from urllib.request import ProxyHandler, build_opener
+origin = sys.argv[1]
+child = subprocess.Popen(sys.argv[2:], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+opener = build_opener(ProxyHandler({}))
 for _ in range(30):
+    if child.poll() is not None:
+        raise SystemExit("orphan fixture exited before readiness")
     try:
-        with socket.create_connection(("127.0.0.1", 8778), timeout=0.1):
-            print("READY")
+        with opener.open(origin + "/api/health", timeout=0.2) as response:
+            health = json.load(response)
+        if health.get("pid") == child.pid and health.get("ready"):
+            print("READY", child.pid)
             break
     except OSError:
-        time.sleep(0.1)
+        pass
+    time.sleep(0.1)
 else:
+    child.terminate()
+    child.wait(timeout=3)
     raise SystemExit("orphan fixture did not start")
 """
             fixture = subprocess.run(
                 [
-                    sys.executable, "-c", wrapper,
-                    sys.executable, str(SERVER), "--port", "8778",
+                    sys.executable, "-c", wrapper, orphan_origin,
+                    sys.executable, str(SERVER), "--port", str(orphan_port),
                     "--vault", str(vault), "--static", str(STATIC),
                 ],
                 env=env,
@@ -550,10 +569,14 @@ else:
                 text=True,
             )
             assert "READY" in fixture.stdout
+            orphan_pid = int(fixture.stdout.strip().split()[-1])
             closed = False
             for _ in range(30):
                 try:
-                    request(orphan_origin + "/api/heartbeat")
+                    _, health = request(orphan_origin + "/api/health")
+                    if health.get("pid") != orphan_pid:
+                        closed = True
+                        break
                 except OSError:
                     closed = True
                     break

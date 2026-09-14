@@ -14,4 +14,4 @@
 2. 尚未完成 Windows 实机的知识/纯净模式切换、图片上传、Agent 交互、重启和关闭回归。
 3. 尚未生成 Windows 运行时的最终 ZIP、SHA-256 和 Windows 代码签名/SmartScreen 验证。
 
-因此此文件夹是 **Windows 适配工程包 / Beta**，不是现在就能发给朋友的最终分享包。等有一台 Windows 实机后，按 `README-Windows.md` 完成运行时准备与验收，再生成独立分享压缩包。
+因此此文件夹是 **Windows 适配工程包 / Beta**，不是现在就能发给朋友的最终分享包。等有一台 Windows 实机后，按 [Windows 说明](https://github.com/asen-goat-mine/boujoy-harness/blob/main/windows/README-Windows.zh-CN.md) 完成运行时准备与验收，再生成独立分享压缩包。

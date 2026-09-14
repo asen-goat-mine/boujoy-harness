@@ -37,10 +37,12 @@ const state = {
   historyHasMore: false,
   historyLoadingOlder: false,
   historyLoadToken: 0,
+  historyOlderLoadToken: 0,
   sending: false,
   poll: null,
   lastHistorySignature: "",
   eventSources: [],
+  eventSourceGeneration: 0,
   visibilitySyncBound: false,
   sessionTailSeq: new Map(),
   sessionSubscribedLastSeq: new Map(),
@@ -408,6 +410,9 @@ async function respondToServer(rpcIdValue, value, mode = state.mode) {
 }
 
 function closeEventSources() {
+  state.eventSourceGeneration += 1;
+  if (state.disconnectTimer) clearTimeout(state.disconnectTimer);
+  state.disconnectTimer = null;
   state.eventSources.forEach(entry => {
     try {
       entry.intentionalClose = true;
@@ -437,33 +442,39 @@ function connectEventStream(endpoint) {
     item.intentionalClose = true;
     try { item.socket.close(); } catch (_) {}
   });
-  const socket = new WebSocket(`ws://${location.host}/api/harness/${state.mode}/${endpoint}?access=${encodeURIComponent(localStorage.getItem("boujoy-access-code") || "")}`);
+  const mode = state.mode;
+  const generation = state.eventSourceGeneration;
+  const socket = new WebSocket(`ws://${location.host}/api/harness/${mode}/${endpoint}?access=${encodeURIComponent(localStorage.getItem("boujoy-access-code") || "")}`);
   const entry = { endpoint, socket, intentionalClose: false };
+  const isCurrent = () => !entry.intentionalClose && mode === state.mode && generation === state.eventSourceGeneration;
   state.eventSources = state.eventSources.filter(item => item.endpoint !== endpoint);
   state.eventSources.push(entry);
   socket.onmessage = event => {
+    if (!isCurrent() || !state.eventSources.includes(entry)) return;
     try { handleServerFrame(JSON.parse(String(event.data))); } catch (_) { /* malformed push */ }
   };
   socket.onclose = () => {
     state.eventSources = state.eventSources.filter(item => item !== entry);
-    if (entry.intentionalClose) return;
+    if (!isCurrent()) return;
     // Disconnect banner with a grace delay: brief reconnects (network blips,
     // gateway restarts) must not flash the banner. Show it only if the mux
     // stays down past the grace window; a successful reconnect cancels it.
     if (endpoint === "events.mux") {
       if (state.disconnectTimer) clearTimeout(state.disconnectTimer);
-      state.disconnectTimer = setTimeout(() => { showDisconnectBanner(); }, 3000);
+      state.disconnectTimer = setTimeout(() => { if (isCurrent() && !eventStreamConnected(endpoint)) showDisconnectBanner(); }, 3000);
     }
     // ALWAYS reconnect, even when the page is hidden: if the mux (approval/
     // question channel) drops while the app sits in the background, skipping
     // the retry here would silently kill every future approval popup. The
     // visibilitychange handler below re-syncs on return to the foreground too.
     setTimeout(() => {
+      if (!isCurrent()) return;
       const replacementExists = state.eventSources.some(item => item.endpoint === endpoint && item.socket.readyState < WebSocket.CLOSING);
       if (!replacementExists) connectEventStream(endpoint);
     }, 1400);
   };
   socket.onopen = () => {
+    if (!isCurrent() || !state.eventSources.includes(entry)) return;
     // After a reconnect, ask the gateway whether interactions are pending:
     // mux replays pending approval/question frames on open, so a fresh socket
     // will surface anything we missed while disconnected.
@@ -1269,6 +1280,7 @@ function resetSessionView(nextSessionId, { loading = false } = {}) {
   state.history = [];
   state.historyHasMore = false;
   state.historyLoadingOlder = false;
+  state.historyOlderLoadToken += 1;
   state.projection = null;
   state.queue = [];
   state.subagents = [];
@@ -1380,14 +1392,21 @@ async function loadOlderHistory() {
     return;
   }
   state.historyLoadingOlder = true;
+  const sessionId = state.sessionId;
+  const mode = state.mode;
+  const historyToken = state.historyLoadToken;
+  const loadToken = ++state.historyOlderLoadToken;
+  const isCurrent = () => sessionId === state.sessionId && mode === state.mode
+    && historyToken === state.historyLoadToken && loadToken === state.historyOlderLoadToken;
   const stream = $("#messageStream");
   const previousHeight = stream.scrollHeight;
   try {
     const value = await rpc("session.history", {
-      sessionId: state.sessionId,
+      sessionId,
       beforeSeq: firstSeq,
       maxMessages: HISTORY_FETCH_LIMIT,
-    });
+    }, mode);
+    if (!isCurrent()) return;
     const older = historyEvents(value);
     const olderTailSeq = sessionEventSeq(older.at(-1));
     if (older.length && olderTailSeq != null && olderTailSeq + 1 !== firstSeq) {
@@ -1405,13 +1424,13 @@ async function loadOlderHistory() {
     state.lastHistorySignature = "";
     renderHistory(state.history, { force: true });
     await new Promise(resolve => requestAnimationFrame(() => {
-      stream.scrollTop += Math.max(0, stream.scrollHeight - previousHeight);
+      if (isCurrent()) stream.scrollTop += Math.max(0, stream.scrollHeight - previousHeight);
       resolve();
     }));
   } catch (error) {
-    toast(error.message, true);
+    if (isCurrent()) toast(error.message, true);
   } finally {
-    state.historyLoadingOlder = false;
+    if (loadToken === state.historyOlderLoadToken) state.historyLoadingOlder = false;
   }
 }
 

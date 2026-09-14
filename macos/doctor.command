@@ -46,6 +46,10 @@ check "DeepSeek Harness" "$([[ -x "${DSH_ROOT}/node_modules/.bin/dsh" ]] && prin
 check "Markdown Vault" "$([[ -d "${VAULT_DIR}" ]] && print yes || print no)" "${VAULT_DIR}"
 check "Python 3" "$([[ -n "${PYTHON_BIN}" && -x "${PYTHON_BIN}" ]] && print yes || print no)" "${PYTHON_BIN:-not found}"
 
+if [[ -n "${PYTHON_BIN}" && -x "${PYTHON_BIN}" ]]; then
+  "${PYTHON_BIN}" "${PROJECT_DIR}/web/check_runtime.py" "${DSH_ROOT}" || FAILURES=$((FAILURES + 1))
+fi
+
 print "--------------------------------"
 if (( FAILURES > 0 )); then
   print "${FAILURES} check(s) need attention. Run ./macos/setup.command for guided setup."
