@@ -394,7 +394,9 @@ try {
 } catch {
     $message = $_.Exception.Message
     if ($script:HostLog) { Write-BoujoyHostLog "ERROR: $message" }
-    Show-BoujoyFailure -Message ($message + "`n`nSee the local Boujoy Windows logs for details.")
+    if (-not $NoBrowser) {
+        Show-BoujoyFailure -Message ($message + "`n`nSee the local Boujoy Windows logs for details.")
+    }
     Write-Error $message
     exit 1
 } finally {

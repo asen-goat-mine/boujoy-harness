@@ -1,0 +1,66 @@
+name: Windows runtime acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-runtime.yml'
+      - 'windows/**'
+      - 'web/**'
+      - 'tests/windows_runtime_acceptance.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      DSH_TELEMETRY_DISABLED: '1'
+      NPM_CONFIG_LOGLEVEL: 'info'
+      NPM_CONFIG_FOREGROUND_SCRIPTS: 'true'
+      NPM_CONFIG_FETCH_RETRIES: '1'
+      NPM_CONFIG_FETCH_TIMEOUT: '30000'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Assemble a synthetic Windows package
+        shell: pwsh
+        run: |
+          ./windows/Build-Windows-Portable.ps1 -Destination "$env:RUNNER_TEMP/acceptance"
+          if (-not $?) { throw 'Package assembly failed' }
+      - name: Install actual pinned Windows runtime
+        timeout-minutes: 8
+        env:
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/harness-npm-cache
+        shell: pwsh
+        run: |
+          ./windows/Prepare-Windows-Runtime.ps1 -Root "$env:RUNNER_TEMP/acceptance/Boujoy-Harness-Windows"
+          if ($LASTEXITCODE -ne 0) { throw 'Native runtime installation failed' }
+      - name: Read installation diagnostics after failure
+        if: failure()
+        env:
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/harness-npm-cache
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:NPM_CONFIG_CACHE/_logs/*.log" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 2 | ForEach-Object {
+              Get-Content $_.FullName -Tail 100
+            }
+      - name: Exercise launch, isolated sessions, restart and stop
+        shell: pwsh
+        run: |
+          python tests/windows_runtime_acceptance.py "$env:RUNNER_TEMP/acceptance/Boujoy-Harness-Windows"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime acceptance failed' }

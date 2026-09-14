@@ -35,7 +35,7 @@ Boujoy-Harness-Windows/
 2. 双击包根目录的 `Setup-Boujoy.cmd`。
 3. 检查通过后双击 `Start-Boujoy.cmd` 或 `启动 Boujoy Harness.cmd`。
 
-引导脚本只在缺少 Windows runtime 时调用 npm 安装；已有完整 runtime 时只做本地检查。它不会复制或上传你的 Vault。
+引导脚本只在缺少 Windows runtime 时安装依赖；已有完整 runtime 时只做本地检查。它先在 runtime 内准备固定版本的 pnpm 11.7.0，再安装上游依赖，避免 npm 在这组 peer dependency 关系中长时间卡住。原生构建脚本使用明确清单，未知脚本会阻断安装；生成的 pnpm 锁文件保留在 runtime 内。它不会复制或上传你的 Vault。
 
 ### 手动准备
 
@@ -60,6 +60,6 @@ powershell -ExecutionPolicy Bypass -File .\windows\Prepare-Windows-Runtime.ps1 -
 
 ## 分发边界
 
-本仓库提供的是 Windows 宿主、启动器、重启桥接和构建脚本。要称为「给朋友直接双击的分享版」，还必须在真实 Windows x64 机器上完成一次运行时安装、启动、知识/纯净模式切换、图片上传、对话交互和重启测试，然后再把 Windows 原生 `runtime/` 连同公开 Vault 一起打包。
+2026-09-14 已在全新的 GitHub Windows x64 运行器上通过[实际运行时验收](https://github.com/asen-goat-mine/boujoy-harness/actions/runs/34829597800)：安装固定上游依赖、启动双模式服务、创建/重命名/读取会话、模式隔离、WebSocket 握手、重启保留会话、删除及停止后端口释放。该次 pnpm 依赖安装耗时 21.7 秒；这是单次 CI 结果，不是用户机器上的耗时承诺。
 
-在没有真实 Windows 验机前，不要把 macOS 的 ZIP 改名为 Windows 版，也不要给出“已验证可用”的承诺。
+本仓库提供 Windows 宿主、启动器、重启桥接和构建脚本。面向朋友的独立分享包仍需在 Windows 10 / 11 桌面完成窗口、模式切换、文件选择、图片上传和真实模型对话验收，再把 Windows 原生 `runtime/` 连同公开 Vault 打包。自动验收使用空白合成配置，没有调用模型；不代表这些桌面交互已经通过。

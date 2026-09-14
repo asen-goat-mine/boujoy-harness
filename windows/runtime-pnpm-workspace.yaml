@@ -1,0 +1,15 @@
+# The launcher and upstream plugin discovery expect a conventional flat layout.
+nodeLinker: hoisted
+autoInstallPeers: true
+strictPeerDependencies: true
+
+# Based on upstream's reviewed build list. Unknown lifecycle scripts remain
+# blocked; this is not a blanket approval of package install scripts.
+allowBuilds:
+  esbuild: true
+  node-pty: true
+  koffi: true
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': false
+  protobufjs: false
+  node-addon-require-builtin: false
