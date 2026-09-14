@@ -28,6 +28,7 @@ function Find-Application {
 }
 
 try {
+    if ($DshVersion -ne "0.1.1-rc.2") { throw "This Boujoy adapter requires DeepSeek Harness 0.1.1-rc.2. See docs/UPSTREAM-COMPATIBILITY.md before upgrading." }
     if ($env:OS -ne "Windows_NT") { throw "This runtime preparation script must run on Windows." }
     if ([string]::IsNullOrWhiteSpace($Root)) { $Root = Split-Path -Parent $PSScriptRoot }
     if (-not (Test-Path -LiteralPath $Root -PathType Container)) { throw "Boujoy package root does not exist: $Root" }

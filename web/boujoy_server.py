@@ -139,6 +139,10 @@ def _ws_relay(browser: socket.socket, upstream: socket.socket) -> None:
     frames are not, and large messages can use continuation frames, so every
     raw byte must cross unchanged.
     """
+    # create_connection's bounded handshake timeout must not become a lifetime
+    # limit on an otherwise healthy, temporarily idle event stream.
+    browser.settimeout(None)
+    upstream.settimeout(None)
     stop = threading.Event()
 
     def pump(source: socket.socket, dest: socket.socket) -> None:
@@ -1533,7 +1537,10 @@ class BoujoyHandler(BaseHTTPRequestHandler):
         except OSError:
             self._error(502, "Harness 事件流未就绪")
             return
-        initial_upstream_bytes = _ws_handshake(upstream, path, "127.0.0.1:3080" if mode == "knowledge" else "127.0.0.1:3081")
+        try:
+            initial_upstream_bytes = _ws_handshake(upstream, path, "127.0.0.1:3080" if mode == "knowledge" else "127.0.0.1:3081")
+        except OSError:
+            initial_upstream_bytes = None
         if initial_upstream_bytes is None:
             try:
                 upstream.close()
@@ -1769,8 +1776,10 @@ def main() -> int:
     # A manually launched server without one must stay local: otherwise a
     # nearby LAN client could read the vault and drive the Harness unauthenticated.
     bind_host = "0.0.0.0" if config.access_code else LOOPBACK
-    server = BoujoyServer((bind_host, args.port), config)
+    # Capture ownership before listen() makes the child visible to its parent.
+    # A short-lived launcher can otherwise exit between bind and getppid().
     native_parent_pid = os.getppid()
+    server = BoujoyServer((bind_host, args.port), config)
 
     def stop_with_native_parent() -> None:
         # A force-quit/crash does not run AppKit's applicationWillTerminate.

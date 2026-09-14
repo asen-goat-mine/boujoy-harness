@@ -29,6 +29,8 @@ Boujoy Harness 不替代 DeepSeek Harness。上游继续负责模型、工具、
 
 > 当前版本按 DeepSeek Harness `0.1.1-rc.2` 适配。源码仓库不提供模型或上游运行时，也不包含个人 Vault、会话或凭据。
 
+上游 `0.1.5-rc.2` 已变更流式通信和会话历史协议，当前先保留兼容版本；安装前检查与迁移验收见 [上游兼容说明](docs/UPSTREAM-COMPATIBILITY.md)。
+
 ## 核心能力
 
 | 能力 | 说明 |

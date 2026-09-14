@@ -105,6 +105,8 @@ function Test-BoujoyLayout {
         throw "Windows runtime is incomplete:`n$detail`n`nDo not copy the macOS runtime into this package. Build/install the Windows x64 DeepSeek Harness runtime first."
     }
     if (-not $SkipProbe) {
+        & $Layout.Python (Join-Path $Layout.Static "check_runtime.py") $Layout.DshRoot
+        if ($LASTEXITCODE -ne 0) { throw "DeepSeek Harness protocol compatibility check failed. Use version 0.1.1-rc.2." }
         & $Layout.Node "--version" *> $null
         if ($LASTEXITCODE -ne 0) { throw "node.exe could not run: $($Layout.Node)" }
         & $Layout.Python "--version" *> $null

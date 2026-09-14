@@ -32,6 +32,8 @@ It keeps the upstream WebSocket event and RPC semantics intact, then connects th
 
 This version is tested with DeepSeek Harness `0.1.1-rc.2`. The source repository does not ship a model, provider account, upstream runtime, vault, session, or credentials.
 
+Upstream `0.1.5-rc.2` changes streaming and session-history protocols. Keep the compatible pin; see [compatibility checks and migration acceptance](docs/UPSTREAM-COMPATIBILITY.md).
+
 ## Main capabilities
 
 | Capability | Why it matters |

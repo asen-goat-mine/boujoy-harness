@@ -1,0 +1,56 @@
+name: Harness checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUTF8: "1"
+  NO_PROXY: "127.0.0.1,localhost"
+
+jobs:
+  contracts:
+    name: Protocol / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Session races and stream lifecycle
+        run: |
+          node --test tests/session_races.test.mjs
+          python tests/test_stream_lifecycle.py
+          python tests/test_runtime_compat.py
+          node --check web/app.js
+          python -m py_compile web/boujoy_server.py
+      - name: Windows PowerShell syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem windows -Filter *.ps1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
+      - name: macOS isolated gateway and portable launchers
+        if: runner.os == 'macOS'
+        run: |
+          python tests/smoke_test.py --skip-live
+          zsh -n macos/*.command
