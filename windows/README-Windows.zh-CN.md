@@ -35,7 +35,7 @@ Boujoy-Harness-Windows/
 2. 双击包根目录的 `Setup-Boujoy.cmd`。
 3. 检查通过后双击 `Start-Boujoy.cmd` 或 `启动 Boujoy Harness.cmd`。
 
-引导脚本只在缺少 Windows runtime 时调用 npm 安装；已有完整 runtime 时只做本地检查。它不会复制或上传你的 Vault。
+引导脚本只在缺少 Windows runtime 时安装依赖；已有完整 runtime 时只做本地检查。它先在 runtime 内准备固定版本的 pnpm 11.7.0，再安装上游依赖，避免 npm 在这组 peer dependency 关系中长时间卡住。原生构建脚本使用明确清单，未知脚本会阻断安装；生成的 pnpm 锁文件保留在 runtime 内。它不会复制或上传你的 Vault。
 
 ### 手动准备
 

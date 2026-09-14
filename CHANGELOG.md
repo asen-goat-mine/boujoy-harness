@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Prepare Windows dependencies with pinned, runtime-local pnpm and explicit lifecycle-script rules to avoid npm peer-placement stalls.
 - Add a disposable Windows runner check that installs the pinned upstream runtime and exercises isolated session operations, WebSocket handshakes, restart and shutdown without model requests.
 - Keep `-NoBrowser` startup failures noninteractive so unattended launchers can report errors without blocking on a dialog.
 
