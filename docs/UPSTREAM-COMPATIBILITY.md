@@ -25,7 +25,7 @@ This is a source contract comparison, not an end-to-end model conversation test.
 
 ## Windows runtime checks
 
-`Windows runtime acceptance` installs the pinned npm runtime on a fresh Windows runner. It uses empty synthetic profiles, checks both modes, session creation/history/rename, WebSocket handshakes, managed restart, deletion and process shutdown. It never sends model prompts or copies credentials. This workflow does not replace manual file-picker, image-upload or model-conversation acceptance.
+`Windows runtime acceptance` installs the pinned published runtime with runtime-local pnpm on a fresh Windows runner. It uses empty synthetic profiles, checks both modes, session creation/history/rename, WebSocket handshakes, managed restart, deletion and process shutdown. The [2026-09-14 run](https://github.com/asen-goat-mine/boujoy-harness/actions/runs/34829597800) passed all these checks. It never sends model prompts or copies credentials. This workflow does not replace manual file-picker, image-upload or model-conversation acceptance.
 
 ## Adapter migration acceptance
 

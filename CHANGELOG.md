@@ -12,4 +12,4 @@
 - Add Linux, macOS and Windows CI for session, stream and version contracts, plus Windows script parsing and macOS gateway/launcher checks.
 - Isolate smoke-test ports and verify child process identity so an unrelated local service cannot be mistaken for the test server.
 
-Windows remains a source/Beta adaptation pending actual runtime and desktop acceptance. No installer or new upstream adapter is included in this update.
+Windows remains a source/Beta adaptation. Actual runtime installation and service/session acceptance passed on a disposable Windows runner; manual Windows 10/11 desktop and model-conversation acceptance remain pending. No installer or new upstream adapter is included in this update.
