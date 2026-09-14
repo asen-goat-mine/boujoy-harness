@@ -65,12 +65,13 @@ try {
     $previousPath = $env:PATH
     $env:PATH = $nodeDirectory + ";" + $env:PATH
     try {
+        Push-Location $dshRoot
         # npm's recursive peer placement stalls on this upstream package graph.
         # Use the upstream package manager, installed inside this runtime only.
         $toolRoot = Join-Path $runtimeRoot "pnpm"
         & $npm "install" "--prefix" $toolRoot "--ignore-scripts" "--no-audit" "--no-fund" "pnpm@11.7.0"
         if ($LASTEXITCODE -ne 0) { throw "Could not prepare pinned pnpm 11.7.0" }
-        $pnpmEntry = Join-Path $toolRoot "node_modules\pnpm\bin\pnpm.cjs"
+        $pnpmEntry = Join-Path $toolRoot "node_modules\pnpm\bin\pnpm.mjs"
         if (-not (Test-Path -LiteralPath $pnpmEntry -PathType Leaf)) { throw "Pinned pnpm entry point is missing" }
         $workspaceTemplate = Join-Path $PSScriptRoot "runtime-pnpm-workspace.yaml"
         $workspaceConfig = Join-Path $dshRoot "pnpm-workspace.yaml"
@@ -81,7 +82,6 @@ try {
         } else {
             Copy-Item -LiteralPath $workspaceTemplate -Destination $workspaceConfig
         }
-        Push-Location $dshRoot
         & $nodeExe $pnpmEntry "install" "--prod" "--no-frozen-lockfile" "--reporter=append-only"
         if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with exit code $LASTEXITCODE" }
     } finally {
