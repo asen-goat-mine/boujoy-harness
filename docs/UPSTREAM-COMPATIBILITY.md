@@ -23,6 +23,10 @@ Source: [stream protocol](https://github.com/deepseek-ai/deepseek-harness/blob/f
 
 This is a source contract comparison, not an end-to-end model conversation test. The version gate prevents accidental upgrades; it does not certify the upstream runtime or provider setup.
 
+## Windows runtime checks
+
+`Windows runtime acceptance` installs the pinned npm runtime on a fresh Windows runner. It uses empty synthetic profiles, checks both modes, session creation/history/rename, WebSocket handshakes, managed restart, deletion and process shutdown. It never sends model prompts or copies credentials. This workflow does not replace manual file-picker, image-upload or model-conversation acceptance.
+
 ## Adapter migration acceptance
 
 Before changing the pin, implement the new transport and session address mapping, then validate knowledge/clean mode isolation, history pagination, streamed tool calls, cancellation, reconnect, image upload, session deletion, restart and shutdown. Run those flows on macOS and Windows with the actual upstream runtime. Keep the current adapter available until the migration is accepted.

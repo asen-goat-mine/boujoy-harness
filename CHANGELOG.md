@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a disposable Windows runner check that installs the pinned upstream runtime and exercises isolated session operations, WebSocket handshakes, restart and shutdown without model requests.
+- Keep `-NoBrowser` startup failures noninteractive so unattended launchers can report errors without blocking on a dialog.
+
 - Discard history responses, animation callbacks and socket events from retired sessions or modes. A stale reconnect cannot reopen the previous mode.
 - Clear WebSocket handshake timeouts before long-lived relaying and close sockets after handshake failures.
 - Check the installed DeepSeek Harness version during setup/preflight; keep `0.1.1-rc.2` until the newer protocol is adapted. See [compatibility](docs/UPSTREAM-COMPATIBILITY.md).
