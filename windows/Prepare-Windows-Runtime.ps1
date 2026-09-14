@@ -58,7 +58,13 @@ try {
     $package = [ordered]@{
         private = $true
         packageManager = "pnpm@11.7.0"
-        dependencies = [ordered]@{ "@deepseek-ai/dsh" = $DshVersion }
+        dependencies = [ordered]@{
+            "@deepseek-ai/dsh" = $DshVersion
+            # Upstream 0.1.1 uses React 18; an unconstrained react-dom peer can
+            # otherwise select React DOM 19 and produce an incompatible pair.
+            "react" = "18.3.1"
+            "react-dom" = "18.3.1"
+        }
     }
     $package | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $packageJson -Encoding UTF8
 
