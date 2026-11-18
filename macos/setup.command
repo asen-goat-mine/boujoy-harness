@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="${SCRIPT_DIR:h}"
 PACKAGE_ROOT="${PROJECT_DIR:h:h}"
-DESKTOP_APP="${HOME}/Desktop/Boujoy Harness.app"
+DESKTOP_APP="${BOUJOY_INSTALL_APP:-${HOME}/Desktop/Boujoy Harness.app}"
 INSTALLED_CONFIG="${DESKTOP_APP}/Contents/Resources/boujoy-config.json"
 
 installed_config_value() {

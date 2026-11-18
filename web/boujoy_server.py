@@ -40,6 +40,22 @@ from typing import Any
 
 
 LOOPBACK = "127.0.0.1"
+
+
+def is_native_app_parent(pid: int) -> bool:
+    """Only signal our native host, never an interactive shell or restore job."""
+    if pid <= 1 or sys.platform != "darwin":
+        return False
+    try:
+        executable = subprocess.check_output(
+            ["/bin/ps", "-ww", "-p", str(pid), "-o", "comm="],
+            text=True, timeout=2,
+        ).strip()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return executable.endswith("/Contents/MacOS/BoujoyHarness")
+
+
 KB_ORIGIN = "http://127.0.0.1:8765"
 HARNESS_ORIGINS = {
     "knowledge": "http://127.0.0.1:3080",
@@ -66,6 +82,7 @@ IGNORED_DIRS = {
     ".nox", ".openai", ".pytest_cache", ".ruff_cache", ".tox", ".venv",
     ".workbuddy", "__pypackages__", "node_modules", "site-packages", "venv",
     "__pycache__", "99-Logs", "_dist", "dist",
+    ".bok", "Bok", "Bok-Desktop", "AI-Second-Brain-UI", "target", "build-resources", "output",
 }
 PROTECTED_MARKDOWN_ROOTS = ("00-system/", "01-inbox/", "ai-second-brain-ui/", "98-skills/", "99-logs/")
 PROTECTED_MARKDOWN_FILES = {"agents.md", "dashboard.md", "readme.md"}
@@ -1613,7 +1630,7 @@ class BoujoyHandler(BaseHTTPRequestHandler):
                 self._error(503, "Windows restart host is not configured")
                 return
             parent_pid = os.getppid()
-            if parent_pid <= 1:
+            if not is_native_app_parent(parent_pid):
                 self._error(503, "native app parent is unavailable")
                 return
 
@@ -1776,8 +1793,6 @@ def main() -> int:
     # A manually launched server without one must stay local: otherwise a
     # nearby LAN client could read the vault and drive the Harness unauthenticated.
     bind_host = "0.0.0.0" if config.access_code else LOOPBACK
-    # Capture ownership before listen() makes the child visible to its parent.
-    # A short-lived launcher can otherwise exit between bind and getppid().
     native_parent_pid = os.getppid()
     server = BoujoyServer((bind_host, args.port), config)
 

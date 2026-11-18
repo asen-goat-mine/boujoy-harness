@@ -33,6 +33,22 @@ class RuntimeCompatibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "0.1.5-rc.2 is not supported"):
             runtime.check_runtime(self.root)
 
+    def test_managed_runtime_checks_real_engine_and_bridge_files(self):
+        wrapper = self.root / "wrapper"
+        wrapper.mkdir()
+        (wrapper / "boujoy-runtime.json").write_text(json.dumps({
+            "version": "0.2.1-alpha.2", "upstreamRoot": str(self.root),
+        }))
+        self.write_version("0.2.1-alpha.2")
+        for name in ("lib/dsh-compat.mjs", "lib/boujoy-upstream.patch.yml", "node_modules/.bin/dsh"):
+            target = wrapper / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.touch()
+        self.assertEqual(runtime.check_runtime(wrapper), "0.2.1-alpha.2")
+        (wrapper / "lib/dsh-compat.mjs").unlink()
+        with self.assertRaisesRegex(ValueError, "Incomplete"):
+            runtime.check_runtime(wrapper)
+
     def test_declaration_is_not_an_install(self):
         (self.root / "package.json").write_text(json.dumps({"dependencies": {"@deepseek-ai/dsh": "0.1.1-rc.2"}}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "declaration alone"):

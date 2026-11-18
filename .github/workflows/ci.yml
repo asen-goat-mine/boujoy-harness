@@ -35,7 +35,8 @@ jobs:
           node-version: "22"
       - name: Session races and stream lifecycle
         run: |
-          node --test tests/session_races.test.mjs
+          node --test tests/session_races.test.mjs tests/upstream_stream_ui.test.mjs
+          python tests/test_restart_parent.py
           python tests/test_stream_lifecycle.py
           python tests/test_runtime_compat.py
           node --check web/app.js
