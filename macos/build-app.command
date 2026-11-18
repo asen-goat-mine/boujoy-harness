@@ -5,7 +5,7 @@ SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="${SCRIPT_DIR:h}"
 PACKAGE_ROOT="${PROJECT_DIR:h:h}"
 APP_DIR="${PROJECT_DIR}/dist/Boujoy Harness.app"
-DESKTOP_APP="${HOME}/Desktop/Boujoy Harness.app"
+DESKTOP_APP="${BOUJOY_INSTALL_APP:-${HOME}/Desktop/Boujoy Harness.app}"
 CONTENTS="${APP_DIR}/Contents"
 RESOURCES="${CONTENTS}/Resources"
 MACOS="${CONTENTS}/MacOS"
@@ -74,6 +74,7 @@ if [[ -n "${PORTABLE_ROOT}" ]]; then
   else
     CONFIG_PYTHON="python3"
   fi
+  [[ ! -f "${DSH_ROOT}/boujoy-runtime.json" ]] || { echo "Managed 0.2 wrappers reference a local upstream installation. Use a local build or a legacy portable runtime."; exit 1; }
   "${SCRIPT_DIR}/make-runtime-portable.command" "${PORTABLE_ROOT}"
   /bin/cp "${SCRIPT_DIR}/open-portable.command" "${PORTABLE_ROOT}/启动 Boujoy Harness.command"
   /bin/chmod 755 "${PORTABLE_ROOT}/启动 Boujoy Harness.command"

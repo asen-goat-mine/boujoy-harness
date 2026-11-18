@@ -24,6 +24,19 @@ def installed_version(root: Path) -> str:
 
 
 def check_runtime(root: Path) -> str:
+    metadata = root / "boujoy-runtime.json"
+    if metadata.is_file():
+        try:
+            config = json.loads(metadata.read_text(encoding="utf-8"))
+            upstream = Path(config["upstreamRoot"])
+            wrapped = installed_version(upstream)
+            if (wrapped == config["version"] == "0.2.1-alpha.2"
+                    and (root / "node_modules/.bin/dsh").is_file()
+                    and all((root / "lib" / name).is_file() for name in ("dsh-compat.mjs", "boujoy-upstream.patch.yml"))):
+                return wrapped
+        except (TypeError, KeyError, OSError, ValueError):
+            pass
+        raise ValueError("Incomplete or incompatible Boujoy 0.2 runtime wrapper")
     version = installed_version(root)
     if version != SUPPORTED_VERSION:
         raise ValueError(

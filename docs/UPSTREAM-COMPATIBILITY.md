@@ -1,6 +1,6 @@
 # DeepSeek Harness compatibility
 
-This Boujoy adapter supports **`0.1.1-rc.2`**. Keep the pinned version when preparing a runtime. A newer upstream release requires a transport and history adapter update before it can be used here.
+Windows Beta and legacy direct runtimes use **`0.1.1-rc.2`**. macOS also supports **`0.2.1-alpha.2`** with the [managed compatibility bridge](DSH-0.2.md). The comparison below documents the legacy protocol.
 
 ## Checks before startup
 

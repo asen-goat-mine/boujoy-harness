@@ -405,7 +405,7 @@ async function respondToServer(rpcIdValue, value, mode = state.mode) {
     method: "POST", headers, body: JSON.stringify(body),
   });
   const receipt = await response.json().catch(() => ({ accepted: false }));
-  if (!response.ok || receipt.accepted === false) throw new Error("交互响应未被 Agent 接收");
+  if (!response.ok || receipt.accepted === false || receipt.result?.ok === false) throw new Error("交互响应未被 Agent 接收");
   return receipt;
 }
 
@@ -481,8 +481,28 @@ function connectEventStream(endpoint) {
     if (endpoint === "events.mux") {
       if (state.disconnectTimer) { clearTimeout(state.disconnectTimer); state.disconnectTimer = null; }
       hideDisconnectBanner();
+      subscribeActiveSession();
     }
   };
+}
+
+function subscribeActiveSession() {
+  if (state.host?.boujoyProtocol !== 2 || !state.sessionId) return;
+  for (const item of state.eventSources) {
+    if (item.endpoint === "events.mux" && item.socket.readyState === WebSocket.OPEN) {
+      item.socket.send(JSON.stringify({type: "subscribe", sessionId: state.sessionId}));
+    }
+  }
+}
+
+function restoreStreamSnapshot(attempt, sessionId) {
+  if (sessionId !== state.sessionId) return;
+  const wasLive = Boolean(state.liveResponse);
+  state.liveResponse = null;
+  if (!attempt && wasLive) renderHistory(state.history, {force: true});
+  for (const item of attempt?.stream || []) {
+    updateLiveResponse({type: "assistant/chunk", data: {chunk: item.chunk || item, attemptId: attempt.attemptId}}, sessionId);
+  }
 }
 
 function eventStreamConnected(endpoint) {
@@ -595,6 +615,10 @@ function hideDisconnectBanner() {
 function handleServerFrame(message) {
   if (message.type !== "server-request") return;
   const frame = message.payload || {};
+  if (frame.type === "session/stream-snapshot") {
+    restoreStreamSnapshot(frame.attempt, frame.sessionId);
+    return;
+  }
   if (frame.type === "session/event" && frame.sessionId === state.sessionId) {
     const entry = { event: frame.event, view: frame.view };
     if (!acceptSessionEvent(frame.sessionId, entry)) return;
@@ -1051,9 +1075,11 @@ function chooseInitialWorkspaceAndSession() {
     const withVault = state.workspaces.find(item => String(item.path || item.cwd || "").includes("AI-Second-Brain"));
     state.workspaceId = (state.mode === "knowledge" ? withVault : null)?.id || state.workspaces[0]?.id || null;
   }
+  const archived = new Set(state.archivedSessionIds || []);
+  const visible = state.sessions.filter(item => !archived.has(item.id) && item.origin !== "subagent");
   const ids = state.workspaces.find(item => item.id === state.workspaceId)?.sessionIds || [];
-  if (!state.sessions.find(item => item.id === state.sessionId)) {
-    state.sessionId = ids[0] || state.sessions[0]?.id || null;
+  if (!visible.find(item => item.id === state.sessionId)) {
+    state.sessionId = ids.find(id => visible.some(item => item.id === id)) || visible[0]?.id || null;
   }
 }
 
@@ -1087,7 +1113,7 @@ function sessionsForWorkspace() {
   const workspace = state.workspaces.find(item => item.id === state.workspaceId);
   const ids = workspace?.sessionIds;
   const archived = new Set(state.archivedSessionIds || []);
-  const visible = state.sessions.filter(item => !archived.has(item.id));
+  const visible = state.sessions.filter(item => !archived.has(item.id) && item.origin !== "subagent");
   if (state.sessionSearchResults) return visible.filter(item => state.sessionSearchResults.has(item.id));
   if (!Array.isArray(ids) || !ids.length) return visible;
   const order = new Map(ids.map((id, index) => [id, index]));
@@ -1300,6 +1326,7 @@ async function loadSession(id, { quiet = false } = {}) {
   state.loadingHistory = true;
   if (switchingSession) resetSessionView(id, { loading: true });
   const loadToken = ++state.historyLoadToken;
+  subscribeActiveSession();
   renderSessions();
   try {
     const [historyValue, models] = await Promise.all([
@@ -1337,6 +1364,7 @@ async function loadSession(id, { quiet = false } = {}) {
     const hasActiveLiveResponse = state.liveResponse?.sessionId === id;
     if (!hasActiveLiveResponse) {
       restoreLiveResponse(state.history, id);
+      if (historyValue.assistantStream?.activeAttempt) restoreStreamSnapshot(historyValue.assistantStream.activeAttempt, id);
     } else {
       // A status-stop repair may find the persisted final message even though
       // its push frame was lost. Feed that canonical event through the same
@@ -1548,6 +1576,7 @@ function acknowledgeSteeringEvent(event, sessionId) {
 }
 
 function streamIdentity(data = {}) {
+  if (data.attemptId) return data.attemptId;
   return `${data.turn ?? data.turnId ?? "turn"}:${data.step ?? data.stepId ?? "step"}`;
 }
 
@@ -2125,7 +2154,7 @@ function renderProjection() {
   const phase = goal?.phase || goal?.status;
   $("#goalActions").innerHTML = goalRef ? `<button data-goal-action="edit">编辑</button>${phase === "paused" || phase === "stopped" ? '<button data-goal-action="resume">继续</button>' : '<button data-goal-action="pause">暂停</button>'}<button data-goal-action="complete">完成</button><button data-goal-action="clear">清除</button>` : '<button id="goalButton">设定目标</button>';
   const plan = projection.plan?.items || projection.plan || projection.todos || [];
-  $("#planList").innerHTML = Array.isArray(plan) && plan.length ? plan.map(item => `<div class="plan-item ${escapeHtml(item.status || "pending")}"><i></i><span>${escapeHtml(item.step || item.text || item.title || String(item))}</span></div>`).join("") : '<p class="muted">Agent 创建计划后会显示在这里。</p>';
+  $("#planList").innerHTML = Array.isArray(plan) && plan.length ? plan.map(item => `<div class="plan-item ${escapeHtml(item.status || "pending")}"><i></i><span>${escapeHtml(item.content || item.step || item.text || item.title || String(item))}</span></div>`).join("") : '<p class="muted">Agent 创建计划后会显示在这里。</p>';
   const running = Boolean(state.sessions.find(item => item.id === state.sessionId)?.running) || ["running", "working", "busy"].includes(String(projection.status || "").toLowerCase());
   state.running = running;
   $("#runState").className = `run-state ${running ? "running" : "idle"}`;
@@ -3003,12 +3032,12 @@ async function loadSettings(tab = "general") {
       ]);
       const providerList = unpackList(providers, ["providers", "items"]);
       const modelList = (models.groups || []).flatMap(group => (group.models || []).map(item => ({ ...item, providerName: group.name })));
-      const credential = credentials.credentials?.DEEPSEEK_API_KEY;
+      const credential = credentials.credentials?.DEEPSEEK_API_KEY || credentials.DEEPSEEK_API_KEY;
       content.innerHTML = `<div class="setting-card"><strong>供应商</strong><small>${escapeHtml(providerList.filter(item => item.active).map(item => item.displayName || item.provider).join(" · ") || "使用 Harness 默认供应商")}</small><div class="setting-actions"><button data-discover-models>重新发现模型</button></div></div>${modelList.slice(0,30).map(item => `<div class="setting-card"><strong>${escapeHtml(item.name || item.id)}</strong><small>${escapeHtml(item.providerName || "")}${item.reasoning?.efforts?.length ? ` · 推理 ${item.reasoning.efforts.map(e => e.name).join("/")}` : ""}</small></div>`).join("")}<div class="setting-card"><strong>DeepSeek API 凭证</strong><small>${credential?.configured ? `已配置 · ${escapeHtml(credential.source || "本地凭证库")}` : "未配置"}。Boujoy 绝不回显现有密钥。</small><div class="credential-row"><input id="credentialInput" type="password" autocomplete="off" placeholder="输入新 Key（不会写入 Vault）"><button data-credential-set>保存</button><button data-credential-unset>清除</button></div></div>`;
     } else if (tab === "presets") {
       const value = await rpc("agentPreset.list", {});
       const items = unpackList(value, ["presets", "items"]);
-      content.innerHTML = items.map(item => `<div class="setting-card"><strong>${escapeHtml(item.name || item.id)}${item.isDefault ? " · 默认" : ""}</strong><small>${escapeHtml(item.description || "Agent 预设")}</small><div class="setting-actions"><button data-preset-action="select:${escapeHtml(item.id)}">用于当前会话</button><button data-preset-action="read:${escapeHtml(item.id)}">查看</button><button data-preset-action="copy:${escapeHtml(item.id)}">复制为自定义</button>${item.trust === "user" ? `<button data-preset-action="open:${escapeHtml(item.id)}">打开文件</button><button data-preset-action="remove:${escapeHtml(item.id)}">删除</button>` : ""}</div></div>`).join("") || '<p class="muted">没有 Agent 预设。</p>';
+      content.innerHTML = items.map(item => `<div class="setting-card"><strong>${escapeHtml(item.name || item.id)}${item.isDefault ? " · 默认" : ""}</strong><small>${escapeHtml(item.description || "Agent 预设")}${state.host?.boujoyProtocol === 2 ? " · 新版由配置声明" : ""}</small><div class="setting-actions"><button data-preset-action="select:${escapeHtml(item.id)}">用于当前会话</button><button data-preset-action="read:${escapeHtml(item.id)}">查看</button>${state.host?.boujoyProtocol === 2 ? "" : `<button data-preset-action="copy:${escapeHtml(item.id)}">复制为自定义</button>`}${state.host?.boujoyProtocol !== 2 && item.trust === "user" ? `<button data-preset-action="open:${escapeHtml(item.id)}">打开文件</button><button data-preset-action="remove:${escapeHtml(item.id)}">删除</button>` : ""}</div></div>`).join("") || '<p class="muted">没有 Agent 预设。</p>';
   } else {
       const value = await rpc("skill.list", { sessionId: state.sessionId });
       const items = unpackList(value, ["skills", "items"]);

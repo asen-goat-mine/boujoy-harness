@@ -25,17 +25,22 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11"]
+        include:
+          - os: ubuntu-22.04
+            python: "3.9"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Session races and stream lifecycle
         run: |
-          node --test tests/session_races.test.mjs
+          node --test tests/session_races.test.mjs tests/upstream_stream_ui.test.mjs
+          python tests/test_restart_parent.py
           python tests/test_stream_lifecycle.py
           python tests/test_runtime_compat.py
           node --check web/app.js

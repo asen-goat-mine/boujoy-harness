@@ -30,9 +30,7 @@ It keeps the upstream WebSocket event and RPC semantics intact, then connects th
 - Paged history, streaming projection, stable scrolling, reconnect handling, and inline image/video previews.
 - Queue-safe interrupt dialogs so expired RPCs do not leave the UI trapped behind a modal.
 
-This version is tested with DeepSeek Harness `0.1.1-rc.2`. The source repository does not ship a model, provider account, upstream runtime, vault, session, or credentials.
-
-Upstream `0.1.5-rc.2` changes streaming and session-history protocols. Keep the compatible pin; see [compatibility checks and migration acceptance](docs/UPSTREAM-COMPATIBILITY.md).
+**macOS 1.1.0** supports the pinned DSH `0.2.1-alpha.2` through the Boujoy compatibility bridge. Switch chats or reconnect during a response and the stream resumes in its original session. Knowledge and clean modes have separate engine homes. Windows Beta and legacy portable setups retain `0.1.1-rc.2`. [Setup and migration](docs/DSH-0.2.md).
 
 ## Main capabilities
 

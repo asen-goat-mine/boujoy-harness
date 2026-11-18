@@ -1,0 +1,11 @@
+# Boujoy keeps session-content search on a disposable in-memory index.
+- id: session-query-sqlite
+  config:
+    path: ':memory:'
+    openAt: first-search
+# Preserve local conversation privacy; model prompts remain explicit user actions.
+- id: session-log-deepseek
+  disabled: true
+# Local first-message titles avoid an extra paid model request for each chat.
+- id: session-title-llm
+  disabled: true
